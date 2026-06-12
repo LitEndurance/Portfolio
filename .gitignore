@@ -1,0 +1,54 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Build outputs
+/.next/
+/build/
+/out/
+
+# Testing
+/coverage
+
+# Environment variables
+.env
+.env*.local
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local runtime / agent tooling
+.playwright-mcp/
+.claude/
+.cursor/
+
+# Managed skill repos (cloned by scripts/workspace)
+/skills/*/
+!/skills/README.md
+
+# Generated / duplicate assets not needed in repo or deploy output.
+# mountain.bin.gz is the canonical compressed asset loaded by the site.
+/public/mountain.bin
+
+# Root duplicate resume (canonical copy lives in public/)
+/IT Focused Resume - Google Docs.pdf

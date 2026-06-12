@@ -1,0 +1,237 @@
+#!/bin/bash
+set -e
+
+# Workspace Skill Manager
+# Keeps one global copy of each skill repo, syncs into projects.
+
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$HOME/.workspace-init}"
+SKILLS_DIR="$WORKSPACE_ROOT/skills"
+CONFIG_FILE="workspace.json"
+
+# Cross-platform helpers
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+can_symlink() {
+  if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+link_or_copy() {
+  local src="$1"
+  local dst="$2"
+  if can_symlink && command_exists ln; then
+    ln -sf "$src" "$dst"
+  else
+    rm -rf "$dst"
+    cp -r "$src" "$dst"
+  fi
+}
+
+repo_to_name() {
+  local repo="$1"
+  # Convert "owner/repo" or "github.com/owner/repo" to "owner-repo"
+  local clean="${repo#https://github.com/}"
+  clean="${clean#http://github.com/}"
+  clean="${clean%.git}"
+  echo "$clean" | tr '/' '-'
+}
+
+usage() {
+  echo "Usage: workspace <command> [args]"
+  echo ""
+  echo "Commands:"
+  echo "  add <repo>     Clone a skill repo into the global cache"
+  echo "  remove <name>  Remove a skill from the global cache"
+  echo "  sync           Link/copy cached skills into this project"
+  echo "  update [name]  Pull latest for all or one cached skill"
+  echo "  list           List cached skills"
+  echo "  status         Show which skills this project uses"
+  echo ""
+  echo "Examples:"
+  echo "  workspace add mattpocock/skills"
+  echo "  workspace sync"
+  echo "  workspace update mattpocock-skills"
+}
+
+cmd_add() {
+  local repo="$1"
+  if [ -z "$repo" ]; then
+    echo "Error: no repo specified"
+    usage
+    exit 1
+  fi
+
+  local name
+  name=$(repo_to_name "$repo")
+  local target="$SKILLS_DIR/$name"
+
+  if [ -d "$target/.git" ]; then
+    echo "Skill '$name' already cached at $target"
+    echo "Run 'workspace update $name' to pull latest"
+    exit 0
+  fi
+
+  mkdir -p "$SKILLS_DIR"
+
+  local clone_url="$repo"
+  if [[ ! "$repo" =~ ^https?:// ]]; then
+    clone_url="https://github.com/$repo.git"
+  fi
+
+  echo "Cloning $clone_url -> $target"
+  git clone --depth 1 "$clone_url" "$target"
+  echo "Added '$name'"
+}
+
+cmd_remove() {
+  local name="$1"
+  if [ -z "$name" ]; then
+    echo "Error: no skill name specified"
+    exit 1
+  fi
+
+  local target="$SKILLS_DIR/$name"
+  if [ ! -d "$target" ]; then
+    echo "Skill '$name' not found in cache"
+    exit 1
+  fi
+
+  rm -rf "$target"
+  echo "Removed '$name' from cache"
+}
+
+cmd_sync() {
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "No $CONFIG_FILE found in current directory."
+    echo "Create one with a 'skills' array, e.g.:"
+    echo '  {"skills": ["mattpocock-skills", "kodustech-awesome-agent-skills"]}'
+    exit 1
+  fi
+
+  # Extract skills list (jq preferred; node fallback because this is a Node project)
+  local skills=()
+  if command_exists jq; then
+    while IFS= read -r skill; do
+      skills+=("$skill")
+    done < <(jq -r '.skills[]' "$CONFIG_FILE" 2>/dev/null)
+  elif command_exists node; then
+    while IFS= read -r skill; do
+      skills+=("$skill")
+    done < <(node -e "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('$CONFIG_FILE','utf8')); (cfg.skills||[]).forEach(s=>console.log(s))" 2>/dev/null)
+  else
+    echo "Error: jq or node is required to parse $CONFIG_FILE"
+    exit 1
+  fi
+
+  if [ ${#skills[@]} -eq 0 ]; then
+    echo "No skills declared in $CONFIG_FILE"
+    exit 0
+  fi
+
+  mkdir -p skills
+
+  for skill in "${skills[@]}"; do
+    local src="$SKILLS_DIR/$skill"
+    local dst="skills/$skill"
+
+    if [ ! -d "$src" ]; then
+      echo "Missing: '$skill' not in global cache. Run 'workspace add <repo>' first."
+      continue
+    fi
+
+    link_or_copy "$src" "$dst"
+    echo "Synced: $skill"
+  done
+
+  echo "Done. ${#skills[@]} skill(s) synced."
+}
+
+cmd_update() {
+  local name="$1"
+
+  if [ -n "$name" ]; then
+    local target="$SKILLS_DIR/$name"
+    if [ ! -d "$target/.git" ]; then
+      echo "Skill '$name' not found or not a git repo"
+      exit 1
+    fi
+    echo "Updating $name..."
+    (cd "$target" && git pull)
+  else
+    for target in "$SKILLS_DIR"/*; do
+      [ -d "$target/.git" ] || continue
+      local bn
+      bn=$(basename "$target")
+      echo "Updating $bn..."
+      (cd "$target" && git pull) || true
+    done
+  fi
+}
+
+cmd_list() {
+  if [ ! -d "$SKILLS_DIR" ]; then
+    echo "No skills cached yet."
+    exit 0
+  fi
+
+  echo "Cached skills in $SKILLS_DIR:"
+  for target in "$SKILLS_DIR"/*; do
+    [ -d "$target" ] || continue
+    local bn
+    bn=$(basename "$target")
+    local hash=""
+    if [ -d "$target/.git" ]; then
+      hash=$(cd "$target" && git rev-parse --short HEAD 2>/dev/null || echo "?")
+    fi
+    echo "  $bn @ $hash"
+  done
+}
+
+cmd_status() {
+  echo "Global cache: $SKILLS_DIR"
+  echo ""
+
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "Project config ($CONFIG_FILE):"
+    cat "$CONFIG_FILE"
+  else
+    echo "No project config found."
+  fi
+
+  echo ""
+  echo "Synced skills in ./skills/:"
+  if [ -d skills ]; then
+    for target in skills/*; do
+      [ -e "$target" ] || continue
+      local bn
+      bn=$(basename "$target")
+      local real=""
+      if can_symlink && [ -L "$target" ]; then
+        real=$(readlink "$target")
+        echo "  $bn -> $real"
+      else
+        echo "  $bn (copied)"
+      fi
+    done
+  else
+    echo "  (none)"
+  fi
+}
+
+# Main
+case "${1:-}" in
+  add)     shift; cmd_add "$@" ;;
+  remove)  shift; cmd_remove "$@" ;;
+  rm)      shift; cmd_remove "$@" ;;
+  sync)    shift; cmd_sync "$@" ;;
+  update)  shift; cmd_update "$@" ;;
+  list)    shift; cmd_list "$@" ;;
+  ls)      shift; cmd_list "$@" ;;
+  status)  shift; cmd_status "$@" ;;
+  st)      shift; cmd_status "$@" ;;
+  *)       usage ;;
+esac

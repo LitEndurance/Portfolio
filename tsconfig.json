@@ -1,0 +1,59 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "out-test-build/types/**/*.ts",
+    "out-test-build/dev/types/**/*.ts",
+    "dist/types/**/*.ts",
+    "dist/dev/types/**/*.ts",
+    "out/types/**/*.ts",
+    "out/dev/types/**/*.ts",
+    "build/types/**/*.ts",
+    "build/dev/types/**/*.ts",
+    "build-export-5/types/**/*.ts",
+    "build-export-5/dev/types/**/*.ts",
+    "build2/types/**/*.ts",
+    "build2/dev/types/**/*.ts",
+    "build3/types/**/*.ts",
+    "build3/dev/types/**/*.ts",
+    "build4/types/**/*.ts",
+    "build4/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "celeste-resume",
+    "skills"
+  ]
+}

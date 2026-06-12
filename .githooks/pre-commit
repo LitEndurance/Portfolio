@@ -1,0 +1,61 @@
+#!/bin/bash
+#
+# Pre-commit hook for AI-driven development.
+# Catches common issues before they hit the repo.
+#
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "Running pre-commit checks..."
+
+# 1. Block commits with unresolved [FILL] markers in AGENTS.md or CONTEXT.md
+if git diff --cached --name-only | grep -qE '(AGENTS\.md|CONTEXT\.md)'; then
+  if git diff --cached | grep -q '^\+.*\[FILL\]'; then
+    echo -e "${RED}ERROR: Unresolved [FILL] markers found in committed docs.${NC}"
+    echo "Fill them in before committing."
+    exit 1
+  fi
+fi
+
+# 2. Block commits with "TODO(ai)" or similar temporary markers
+TODO_PATTERN='TODO\(ai\)|TODO\(agent\)|FIXME\(ai\)|HACK\(ai\)'
+if git diff --cached | grep -iE "^\+.*${TODO_PATTERN}" > /dev/null 2>&1; then
+  echo -e "${YELLOW}WARNING: Temporary AI markers found:${NC}"
+  git diff --cached | grep -iE "^\+.*${TODO_PATTERN}" | head -5
+  echo -e "${YELLOW}Remove or resolve these before committing.${NC}"
+  exit 1
+fi
+
+# 3. Block large files (>5MB) from being committed
+MAX_SIZE_BYTES=5242880
+while read -r file; do
+  if [ -f "$file" ]; then
+    size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo 0)
+    if [ "$size" -gt "$MAX_SIZE_BYTES" ]; then
+      echo -e "${RED}ERROR: File too large to commit (>5MB): $file${NC}"
+      echo "Add it to .gitignore or use Git LFS."
+      exit 1
+    fi
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+# 4. Check for trailing whitespace in common code files
+if git diff --cached --check > /dev/null 2>&1; then
+  echo -e "${RED}ERROR: Trailing whitespace or conflict markers found.${NC}"
+  git diff --cached --check
+  exit 1
+fi
+
+# 5. Prevent committing .env files
+if git diff --cached --name-only | grep -qE '^\.env($|\.)'; then
+  echo -e "${RED}ERROR: .env files should not be committed.${NC}"
+  echo "Add them to .gitignore and commit a .env.example instead."
+  exit 1
+fi
+
+echo -e "${GREEN}Pre-commit checks passed.${NC}"
