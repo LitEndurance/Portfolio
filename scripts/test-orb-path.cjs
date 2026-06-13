@@ -18,11 +18,11 @@ const BIN = path.join(__dirname, "../public/mountain.bin");
 
 const ZONES = [
   { zone: "hero", progressStart: 0, trailT: 0.06 },
-  { zone: "about", progressStart: 0.088, trailT: 0.18 },
-  { zone: "skills", progressStart: 0.264, trailT: 0.36 },
+  { zone: "about", progressStart: 0.14, trailT: 0.18 },
+  { zone: "skills", progressStart: 0.28, trailT: 0.36 },
   { zone: "projects", progressStart: 0.44, trailT: 0.55 },
-  { zone: "gallery", progressStart: 0.647, trailT: 0.74 },
-  { zone: "contact", progressStart: 0.853, trailT: 0.9 },
+  { zone: "gallery", progressStart: 0.63, trailT: 0.74 },
+  { zone: "contact", progressStart: 0.94, trailT: 0.9 },
 ];
 
 const MARKERS = [

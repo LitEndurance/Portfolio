@@ -139,11 +139,11 @@ export default function Home() {
         <AdaptiveMountain ref={mountainRef} />
         <div id="hero" className="relative z-[2]"><HeroSection /></div>
         <div className="relative z-[2]">
-          <div id="about" className="content-visibility-section"><AboutSection /></div>
-          <div id="skills" className="content-visibility-section"><SkillsGridSection /></div>
-          <div id="projects" className="content-visibility-section"><ProjectsSection /></div>
-          <div id="gallery" className="content-visibility-section"><GallerySection /></div>
-          <div id="contact" className="content-visibility-section"><ContactSection /></div>
+          <div id="about"><AboutSection /></div>
+          <div id="skills"><SkillsGridSection /></div>
+          <div id="projects"><ProjectsSection /></div>
+          <div id="gallery"><GallerySection /></div>
+          <div id="contact"><ContactSection /></div>
           <Footer />
         </div>
         <BootLockedContent mountainRef={mountainRef} />

@@ -28,11 +28,6 @@
 
 html { scroll-behavior: auto; }
 
-/* Skip off-screen section painting during initial load. */
-.content-visibility-section {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
 
 html,
 body {

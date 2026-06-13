@@ -19,6 +19,10 @@ export interface ZoneConfig {
 // trailhead. Derive markers, camera landmarks, progress thresholds, and UI
 // labels from this table.
 //
+// progressStart is tuned so each zone activates when its section top reaches
+// the top of the viewport. The orb uses these thresholds to arrive at each
+// marker exactly when the user scrolls into the matching zone.
+//
 // Camera path: the climb starts at the front/center city marker, swings up
 // the left ridge, then arcs back to the right for the summit reveal. Radius
 // shrinks as we ascend so the camera zooms in on each location, while camY
@@ -39,18 +43,18 @@ export const ZONES: ZoneConfig[] = [
     zone: "about",
     icon: "🚩",
     label: "Base Camp",
-    progressStart: 0.088,
+    progressStart: 0.14,
     trailT: 0.18,
-    landmark: { progress: 0.176, angle: 2.4, radius: 19, camY: 4.5 },
+    landmark: { progress: 0.16, angle: 2.4, radius: 19, camY: 4.5 },
     cardSide: "right",
   },
   {
     zone: "skills",
     icon: "⛏️",
     label: "Gear Wall",
-    progressStart: 0.264,
+    progressStart: 0.28,
     trailT: 0.36,
-    landmark: { progress: 0.351, angle: 2.7, radius: 15, camY: 5.5 },
+    landmark: { progress: 0.30, angle: 2.7, radius: 15, camY: 5.5 },
     cardSide: "left",
   },
   {
@@ -59,27 +63,27 @@ export const ZONES: ZoneConfig[] = [
     label: "Summit Log",
     progressStart: 0.44,
     trailT: 0.55,
-    landmark: { progress: 0.528, angle: 0.5, radius: 12, camY: 6.5 },
+    landmark: { progress: 0.46, angle: 0.5, radius: 12, camY: 6.5 },
     cardSide: "right",
   },
   {
     zone: "gallery",
     icon: "📸",
     label: "Trail Markers",
-    progressStart: 0.647,
+    progressStart: 0.63,
     trailT: 0.74,
-    landmark: { progress: 0.765, angle: 0.1, radius: 10, camY: 7.5 },
+    landmark: { progress: 0.65, angle: 0.1, radius: 10, camY: 7.5 },
     cardSide: "left",
   },
   {
     zone: "contact",
     icon: "📡",
     label: "Summit",
-    progressStart: 0.853,
+    progressStart: 0.94,
     trailT: 0.9,
     // Summit close-up that already begins the slow pull-back toward the
     // trailhead. Keep this wide-ish; the final frame finishes the zoom-out.
-    landmark: { progress: 0.941, angle: 0.1, radius: 14, camY: 8 },
+    landmark: { progress: 0.96, angle: 0.1, radius: 14, camY: 8 },
     cardSide: "left",
   },
 ];
