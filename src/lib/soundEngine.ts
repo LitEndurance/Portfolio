@@ -8,9 +8,11 @@ let masterGain: GainNode | null = null;
 let isMuted = false;
 let currentVolume = 0.6;
 let hasResumed = false;
+let bootFadedIn = false;
 
 const VOLUME = 0.12;
 const WIND_VOLUME = 0.04;
+const BOOT_FADE_SECONDS = 2.2;
 
 let windNode: AudioBufferSourceNode | null = null;
 let windGain: GainNode | null = null;
@@ -27,24 +29,23 @@ function getCtx(): AudioContext | null {
     if (!Ctx) return null;
     audioCtx = new Ctx();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = isMuted ? 0 : VOLUME;
+    masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
     masterGain.connect(audioCtx.destination);
   }
   return audioCtx;
 }
 
-async function resumeIfNeeded() {
+async function resumeIfNeeded(): Promise<boolean> {
   const ctx = getCtx();
-  if (!ctx || hasResumed) return;
-  if (ctx.state === "suspended") {
-    try {
-      await ctx.resume();
-      hasResumed = true;
-    } catch {
-      // noop — audio will stay silent until the browser allows it
-    }
-  } else {
-    hasResumed = true;
+  if (!ctx) return false;
+  if (ctx.state === "running") return true;
+  if (hasResumed && ctx.state !== "suspended") return true;
+  try {
+    await ctx.resume();
+    hasResumed = (ctx.state as string) === "running";
+    return hasResumed;
+  } catch {
+    return false;
   }
 }
 
@@ -83,7 +84,7 @@ function startWindLoop() {
   src.loop = true;
 
   const gain = ctx.createGain();
-  gain.gain.value = isMuted ? 0 : WIND_VOLUME * currentVolume;
+  gain.gain.value = isMuted || !bootFadedIn ? 0 : WIND_VOLUME * currentVolume;
 
   const filter = ctx.createBiquadFilter();
   filter.type = "lowpass";
@@ -118,9 +119,7 @@ function addUnlockListener() {
   unlockListenerAdded = true;
   const tryUnlock = () => {
     if (!isMuted) {
-      resumeIfNeeded().then(() => {
-        startWindLoop();
-      });
+      fadeIn();
     }
   };
   document.addEventListener("click", tryUnlock, { once: true });
@@ -130,11 +129,13 @@ function addUnlockListener() {
 function applyVolume() {
   if (masterGain && audioCtx) {
     const t = audioCtx.currentTime;
+    const target = isMuted || !bootFadedIn ? 0 : VOLUME * currentVolume;
     masterGain.gain.cancelScheduledValues(t);
-    masterGain.gain.setTargetAtTime(isMuted ? 0 : VOLUME * currentVolume, t, 0.02);
+    masterGain.gain.setTargetAtTime(target, t, 0.02);
   }
   if (windGain && audioCtx) {
-    windGain.gain.setTargetAtTime(isMuted ? 0 : WIND_VOLUME * currentVolume, audioCtx.currentTime, 0.02);
+    const target = isMuted || !bootFadedIn ? 0 : WIND_VOLUME * currentVolume;
+    windGain.gain.setTargetAtTime(target, audioCtx.currentTime, 0.02);
   }
 }
 
@@ -151,7 +152,40 @@ function setMuted(muted: boolean, volume?: number) {
     stopWindLoop();
   } else {
     startWindLoop();
+  }
+}
+
+async function fadeIn(volume?: number) {
+  if (isMuted) return;
+  if (typeof volume === "number") currentVolume = Math.max(0, Math.min(1, volume));
+
+  const resumed = await resumeIfNeeded();
+  startWindLoop();
+
+  if (!resumed) {
+    // Browser autoplay policy is still blocking us — fade in on the first user gesture.
     addUnlockListener();
+    return;
+  }
+
+  if (bootFadedIn) return;
+  bootFadedIn = true;
+
+  const ctx = getCtx();
+  if (!ctx || !masterGain) return;
+
+  const t = ctx.currentTime;
+  const masterTarget = VOLUME * currentVolume;
+  const windTarget = WIND_VOLUME * currentVolume;
+
+  masterGain.gain.cancelScheduledValues(t);
+  masterGain.gain.setValueAtTime(0, t);
+  masterGain.gain.linearRampToValueAtTime(masterTarget, t + BOOT_FADE_SECONDS);
+
+  if (windGain) {
+    windGain.gain.cancelScheduledValues(t);
+    windGain.gain.setValueAtTime(0, t);
+    windGain.gain.linearRampToValueAtTime(windTarget, t + BOOT_FADE_SECONDS);
   }
 }
 
@@ -212,6 +246,13 @@ function playNoise(duration = 0.05, gainValue = 0.3) {
 export const soundEngine = {
   setMuted,
   setVolume,
+
+  init() {
+    getCtx();
+    if (!isMuted) startWindLoop();
+  },
+
+  fadeIn,
 
   setScrollVelocity(velocity: number) {
     if (!windGain || !audioCtx) return;

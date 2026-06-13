@@ -264,9 +264,13 @@ export function ClimbProvider({ children }: { children: React.ReactNode }) {
     state.soundVolume,
   ]);
 
+  // Defer Web Audio initialization until the boot sequence is done. Creating
+  // an AudioContext during initial load triggers the autoplay suspension warning
+  // and consumes resources on low-end devices before any sound is needed.
   useEffect(() => {
+    if (state.bootStage !== "ready") return;
     soundEngine.setMuted(!state.soundEnabled, state.soundVolume);
-  }, [state.soundEnabled, state.soundVolume]);
+  }, [state.bootStage, state.soundEnabled, state.soundVolume]);
 
   const setBootStage = useCallback(
     (stage: ClimbState["bootStage"]) => dispatch({ type: "SET_BOOT_STAGE", stage }),

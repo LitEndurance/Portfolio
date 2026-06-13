@@ -14,6 +14,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { soundEngine } from "@/lib/soundEngine";
 import { useClimb, type Zone } from "@/components/ClimbContext";
 import { ZONES, progressToZone, zoneTrailT } from "@/components/zoneConfig";
+import type { DeviceTier } from "@/hooks/useDeviceTier";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -313,9 +314,16 @@ async function loadMountainBinary(): Promise<MountainData> {
 // are placed in a 360° ring around the main mountain so the camera
 // is fully enclosed by background peaks no matter how it rotates.
 
-function createBackgroundMountainSegment(seed: number): THREE.BufferGeometry {
-  // Tall vertical segment that fills the frame even when the camera looks upward
-  const geometry = new THREE.PlaneGeometry(90, 220, 40, 110);
+function createBackgroundMountainSegment(
+  seed: number,
+  isLowQuality: boolean,
+  isMediumQuality: boolean
+): THREE.BufferGeometry {
+  // Reduce segment density on lower-end devices. The silhouettes are far
+  // enough in the fog that the lower poly count is barely visible.
+  const wSegs = isLowQuality ? 12 : isMediumQuality ? 24 : 40;
+  const hSegs = isLowQuality ? 28 : isMediumQuality ? 60 : 110;
+  const geometry = new THREE.PlaneGeometry(90, 220, wSegs, hSegs);
   const positions = geometry.attributes.position.array as Float32Array;
   const colors: number[] = [];
 
@@ -398,9 +406,13 @@ function createBackgroundMountainSegment(seed: number): THREE.BufferGeometry {
   return geometry;
 }
 
-function createBackgroundMountainRing(): THREE.Group {
+function createBackgroundMountainRing(
+  isLowQuality: boolean,
+  isMediumQuality: boolean
+): THREE.Group {
   const group = new THREE.Group();
-  const segmentCount = 8;
+  // Fewer segments on low-end; the fog hides the gaps.
+  const segmentCount = isLowQuality ? 5 : isMediumQuality ? 6 : 8;
   const radius = 60;
 
   const bgMat = new THREE.MeshStandardMaterial({
@@ -413,7 +425,7 @@ function createBackgroundMountainRing(): THREE.Group {
 
   for (let i = 0; i < segmentCount; i++) {
     const angle = (i / segmentCount) * Math.PI * 2;
-    const geometry = createBackgroundMountainSegment(i);
+    const geometry = createBackgroundMountainSegment(i, isLowQuality, isMediumQuality);
     const mesh = new THREE.Mesh(geometry, bgMat);
 
     // Position around a circle, facing inward toward the main mountain
@@ -768,9 +780,12 @@ function createAtmosphericGlow(): THREE.Sprite {
 // A rolling foreground that rises up to meet the mountain so the
 // peak feels anchored to the world rather than floating in space.
 
-function createBaseTerrain(): THREE.Mesh {
+function createBaseTerrain(
+  isLowQuality: boolean,
+  isMediumQuality: boolean
+): THREE.Mesh {
   const size = 90;
-  const segments = 110;
+  const segments = isLowQuality ? 36 : isMediumQuality ? 64 : 110;
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   const positions = geometry.attributes.position.array as Float32Array;
   const colors: number[] = [];
@@ -864,23 +879,50 @@ function createMarkerTexture(icon: string, label: string): THREE.CanvasTexture {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Glass banner background
-  ctx.fillStyle = "rgba(13, 17, 23, 0.78)";
-  roundRect(ctx, 6, 6, 244, 100, 12);
+  // ── Inside box: glass pill with subtle inner glow ──
+  const boxX = 8;
+  const boxY = 16;
+  const boxW = 240;
+  const boxH = 80;
+  const r = 16;
+
+  // Soft outer glow behind the box
+  const glow = ctx.createRadialGradient(
+    canvas.width / 2,
+    canvas.height / 2,
+    16,
+    canvas.width / 2,
+    canvas.height / 2,
+    90
+  );
+  glow.addColorStop(0, "rgba(78, 205, 196, 0.22)");
+  glow.addColorStop(1, "rgba(78, 205, 196, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Glass background
+  ctx.fillStyle = "rgba(10, 14, 22, 0.82)";
+  roundRect(ctx, boxX, boxY, boxW, boxH, r);
   ctx.fill();
 
+  // Inner highlight line
+  ctx.strokeStyle = "rgba(232, 248, 255, 0.14)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, boxX + 1, boxY + 1, boxW - 2, boxH - 2, r - 1);
+  ctx.stroke();
+
   // Cyan border
-  ctx.strokeStyle = "rgba(78, 205, 196, 0.65)";
+  ctx.strokeStyle = "rgba(78, 205, 196, 0.75)";
   ctx.lineWidth = 2;
-  roundRect(ctx, 6, 6, 244, 100, 12);
+  roundRect(ctx, boxX, boxY, boxW, boxH, r);
   ctx.stroke();
 
   // Icon
-  ctx.font = "34px sans-serif";
+  ctx.font = "32px sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#e8f8ff";
-  ctx.fillText(icon, 22, 56);
+  ctx.fillText(icon, 28, 56);
 
   // Label
   ctx.font = "600 22px ui-monospace, monospace";
@@ -890,6 +932,61 @@ function createMarkerTexture(icon: string, label: string): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
+  return texture;
+}
+
+// ─── Pokestop-style outer ring ──────────────────────────
+// A segmented cyan ring that spins when you hover the selected marker.
+function createPokestopRingTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Soft ambient glow
+  const glow = ctx.createRadialGradient(cx, cy, size * 0.26, cx, cy, size * 0.46);
+  glow.addColorStop(0, "rgba(78, 205, 196, 0)");
+  glow.addColorStop(0.55, "rgba(78, 205, 196, 0.18)");
+  glow.addColorStop(0.78, "rgba(78, 205, 196, 0.35)");
+  glow.addColorStop(1, "rgba(78, 205, 196, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, size, size);
+
+  // Segmented outer ring — dashed motion look
+  const segments = 12;
+  const innerR = size * 0.30;
+  const outerR = size * 0.38;
+  const gap = 0.12; // radians gap between segments
+
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2 + gap * 0.5;
+    const a1 = ((i + 1) / segments) * Math.PI * 2 - gap * 0.5;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, a0, a1);
+    ctx.arc(cx, cy, innerR, a1, a0, true);
+    ctx.closePath();
+
+    // Alternate bright/dim segments for motion readability
+    const bright = i % 2 === 0;
+    ctx.fillStyle = bright ? "rgba(78, 205, 196, 0.92)" : "rgba(78, 205, 196, 0.42)";
+    ctx.fill();
+  }
+
+  // Inner thin rim
+  ctx.strokeStyle = "rgba(232, 248, 255, 0.55)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR - 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
@@ -1119,12 +1216,18 @@ function createGlowTexture(
 
 // ─── Main Component ─────────────────────────────────────
 
-const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
-  props,
+interface Mountain3DProps {
+  quality?: DeviceTier;
+}
+
+const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain3D(
+  { quality = "high" },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number>(0);
+  const frameCounterRef = useRef<number>(0);
+  const isVisibleRef = useRef<boolean>(true);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const {
     bootStage,
@@ -1144,18 +1247,10 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
   const mountainExtentsRef = useRef<{ halfX: number; halfZ: number } | null>(
     null
   );
-  const baseCampArcRef = useRef<
-    | {
-        start: THREE.Vector3;
-        gear: THREE.Vector3;
-        startAngle: number;
-        gearAngle: number;
-        startRadius: number;
-        gearRadius: number;
-        bulge: number;
-      }
-    | null
-  >(null);
+  const hoopPositionsRef = useRef<THREE.Vector3[]>([]);
+  const orbCurveRef = useRef<THREE.CatmullRomCurve3 | null>(null);
+  const orbSmoothedRef = useRef<THREE.Vector3 | null>(null);
+  const getOrbPositionRef = useRef<((progress: number) => THREE.Vector3) | null>(null);
   const mountainCenterRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
   const markersRef = useRef<
     {
@@ -1163,11 +1258,16 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
       ring: THREE.Mesh;
       portal: THREE.Sprite;
       sprite: THREE.Sprite;
+      hoverRing: THREE.Sprite;
       zone: Zone;
       basePosition: THREE.Vector3;
       t: number;
+      hovered: boolean;
     }[]
   >([]);
+  const raycasterRef = useRef(new THREE.Raycaster());
+  const pointerRef = useRef(new THREE.Vector2(-999, -999));
+  const hoveredMarkerRef = useRef<(typeof markersRef.current)[number] | null>(null);
   const climberRef = useRef<THREE.Sprite | null>(null);
   const climberTrailRef = useRef<THREE.Points | null>(null);
   const flagRef = useRef<THREE.Sprite | null>(null);
@@ -1203,6 +1303,17 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
+    // Quality-driven defaults. Reduced motion is treated as a low-energy request.
+    const isLowQuality = quality === "low" || prefersReducedMotion;
+    const isMediumQuality = quality === "medium" && !prefersReducedMotion;
+
+    const enableAntialias = quality === "high";
+    const pixelRatioCap = isLowQuality ? 1 : isMediumQuality ? 1.5 : 2;
+    const enableShadows = quality !== "low";
+    const shadowMapSize = isMediumQuality ? 1024 : 2048;
+    const snowCountBase = isLowQuality ? 80 : isMediumQuality ? 500 : 2000;
+    const starCountBase = isLowQuality ? 100 : isMediumQuality ? 400 : 1000;
+
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     scene.background = createSkyGradient();
@@ -1215,15 +1326,19 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
       200
     );
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    const renderer = new THREE.WebGLRenderer({ antialias: enableAntialias, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioCap));
     renderer.setClearColor(SKY_BOTTOM, 1);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.shadowMap.enabled = enableShadows;
+    renderer.shadowMap.type = enableShadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    // ACES tone mapping is expensive; fall back to cheaper Reinhard on low-end.
+    renderer.toneMapping = isLowQuality
+      ? THREE.ReinhardToneMapping
+      : THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     container.appendChild(renderer.domElement);
+    const canvasEl = renderer.domElement;
 
     // ─── Lighting ──────────────────────────────────────
     // Dark, moody Celeste style: low ambient, a strong directional key light
@@ -1234,12 +1349,12 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
     // Warm fill from front-right to keep shadowed faces barely readable
     const fill = new THREE.DirectionalLight(0x504060, 0.35);
     fill.position.set(12, 6, 10);
-    scene.add(fill);
+    if (!isLowQuality) scene.add(fill);
 
     // Soft cyan rim from behind
     const rim = new THREE.DirectionalLight(0x50a0b0, 0.60);
     rim.position.set(-6, 8, -16);
-    scene.add(rim);
+    if (!isLowQuality) scene.add(rim);
 
     // Subtle camera-aligned fill so the mountain remains readable from every
     // scroll-driven viewpoint without flattening the soft moonlight.
@@ -1250,9 +1365,10 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
     summitLight.position.set(-2, 18, 0);
     scene.add(summitLight);
 
-    // Cyan point light that travels to the active trail marker so the hoop
-    // glows from within and the "light through the ring" reads on camera.
-    const markerLight = new THREE.PointLight(0x4ecdc4, 0, 24);
+    // Bright cyan point light that travels along the ridge trail with the
+    // climber. Higher intensity and range so it reads clearly against the
+    // dark mountain surface and casts a vivid glow on nearby rock.
+    const markerLight = new THREE.PointLight(0x5ee0e8, 0, 36);
     scene.add(markerLight);
 
     // The traveling light has no visible sprite — only the point light and its
@@ -1263,13 +1379,13 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
 
     // ─── Background Mountains ──────────────────────────
     // Full 360° ring of silhouetted peaks surrounding the main mountain
-    const bgRing = createBackgroundMountainRing();
+    const bgRing = createBackgroundMountainRing(isLowQuality, isMediumQuality);
     scene.add(bgRing);
 
     // ─── Base Terrain ──────────────────────────────────
     // Rolling ground that rises to meet the mountain base
-    const baseTerrain = createBaseTerrain();
-    baseTerrain.receiveShadow = true;
+    const baseTerrain = createBaseTerrain(isLowQuality, isMediumQuality);
+    baseTerrain.receiveShadow = enableShadows;
     scene.add(baseTerrain);
 
     // ─── Atmosphere (no terrain dependency) ────────────
@@ -1278,8 +1394,8 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
     moonLight.position.set(-24, 32, -4);
     moonLight.target.position.set(0, 2, -8);
     moonLight.castShadow = true;
-    moonLight.shadow.mapSize.width = 2048;
-    moonLight.shadow.mapSize.height = 2048;
+    moonLight.shadow.mapSize.width = shadowMapSize;
+    moonLight.shadow.mapSize.height = shadowMapSize;
     moonLight.shadow.camera.near = 1;
     moonLight.shadow.camera.far = 140;
     moonLight.shadow.camera.left = -40;
@@ -1290,20 +1406,20 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
     scene.add(moonLight);
     scene.add(moonLight.target);
 
-    // Subtle glow from the small traveling light; kept faint so it doesn't
-    // become a second moon.
-    const orbGlow = new THREE.PointLight(0x80d0ff, 0, 40);
+    // Wide, bright glow from the traveling light so the orb leaves a vivid
+    // luminous footprint on the mountain as it ascends.
+    const orbGlow = new THREE.PointLight(0x90e8ff, 0, 60);
     orbGlow.position.set(0, 0, 0);
     scene.add(orbGlow);
 
     const aurora = createAurora();
     scene.add(aurora);
 
-    const snowCount = prefersReducedMotion ? 80 : 2000;
+    const snowCount = snowCountBase;
     const snow = createSnow(snowCount);
     scene.add(snow);
 
-    const stars = createStars(prefersReducedMotion ? 200 : 1000);
+    const stars = createStars(starCountBase);
     scene.add(stars);
 
     const clouds = createClouds();
@@ -1835,13 +1951,69 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
           camera.position.copy(pose.pos);
           camera.lookAt(pose.lookAt);
 
-          cameraLight.position.copy(pose.pos);
-          cameraLight.target.position.copy(pose.lookAt);
-          cameraLight.target.updateMatrixWorld();
+          if (cameraLight) {
+            cameraLight.position.copy(pose.pos);
+            cameraLight.target.position.copy(pose.lookAt);
+            cameraLight.target.updateMatrixWorld();
+          }
 
-          // Moon fill is kept static; the traveling hoop orb is now the
+          // Moon fill is kept static; the traveling ridge orb is now the
           // moving light source and its glow is updated in the animation loop.
         };
+
+        // Compute the orb's target position by sampling the smooth curve that
+        // passes through every marker hoop. This guarantees the orb travels
+        // Base Camp → Gear Wall → Summit Log → Trail Markers → Summit while
+        // winding around the mountain instead of cutting through it.
+        const orbThresholds = [
+          0,
+          ZONES[2].progressStart, // Gear Wall
+          ZONES[3].progressStart, // Summit Log
+          ZONES[4].progressStart, // Trail Markers
+          ZONES[5].progressStart, // Summit
+        ];
+
+        function getOrbPosition(progress: number): THREE.Vector3 {
+          const curve = orbCurveRef.current;
+          if (!curve || curve.points.length === 0) {
+            return pathCurve!.getPoint(0).clone();
+          }
+
+          // Find the segment the current progress falls into.
+          let idx = 0;
+          for (let i = 0; i < orbThresholds.length - 1; i++) {
+            if (
+              progress >= orbThresholds[i] &&
+              progress < orbThresholds[i + 1]
+            ) {
+              idx = i;
+              break;
+            }
+          }
+          if (progress >= orbThresholds[orbThresholds.length - 1]) {
+            idx = orbThresholds.length - 1;
+          }
+
+          const segmentStart = orbThresholds[idx];
+          const segmentEnd =
+            orbThresholds[Math.min(idx + 1, orbThresholds.length - 1)];
+          const rawT =
+            segmentEnd === segmentStart
+              ? 0
+              : (progress - segmentStart) / (segmentEnd - segmentStart);
+          const easedT = easeInOutQuad(Math.max(0, Math.min(1, rawT)));
+
+          // The curve was built from the hoop points, so its parameter t maps
+          // evenly to the hoops: t=0, 0.25, 0.5, 0.75, 1.0. Interpolating in
+          // this parameter space guarantees the orb passes exactly through
+          // each landmark.
+          const segmentCount = orbThresholds.length - 1;
+          const t0 = idx / segmentCount;
+          const t1 = Math.min(idx + 1, segmentCount) / segmentCount;
+          const t = t0 + (t1 - t0) * easedT;
+          return curve.getPoint(Math.max(0, Math.min(1, t)));
+        }
+        getOrbPositionRef.current = getOrbPosition;
 
         updateCamera(0);
 
@@ -1907,62 +2079,109 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
           sprite.position.y += 0.85;
           markerGroup.add(sprite);
 
+          // Pokestop-style outer ring — hidden by default, spins on hover
+          const hoverRingTexture = createPokestopRingTexture();
+          const hoverRingMat = new THREE.SpriteMaterial({
+            map: hoverRingTexture,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          });
+          const hoverRing = new THREE.Sprite(hoverRingMat);
+          hoverRing.scale.set(1.85, 1.85, 1);
+          hoverRing.position.copy(basePosition);
+          hoverRing.position.y += 0.85;
+          markerGroup.add(hoverRing);
+
           markersRef.current.push({
             group: markerGroup,
             ring,
             portal,
             sprite,
+            hoverRing,
             zone: m.zone,
             basePosition,
             t: m.t,
+            hovered: false,
           });
         });
 
-        // Compute a direct surface arc from the front/center Base Camp marker
-        // to Gear Wall. The arc bulges outward by the mountain's bounding
-        // radius so the light never cuts through the rock.
+        // Surface-pushing helper for the construction phase (uses the same
+        // bounding-ellipse logic as the animation loop).
+        function pushToSurfaceConstruction(
+          point: THREE.Vector3,
+          margin = 0.3
+        ): THREE.Vector3 {
+          const dx = point.x - centerX;
+          const dz = point.z - centerZ;
+          const r = Math.sqrt(dx * dx + dz * dz);
+          if (r < 0.001) return point;
+          const angle = Math.atan2(dz, dx);
+          const rx = (bbox.max.x - bbox.min.x) * 0.5;
+          const rz = (bbox.max.z - bbox.min.z) * 0.5;
+          const minR =
+            1 /
+              Math.sqrt(
+                (Math.cos(angle) * Math.cos(angle)) / (rx * rx) +
+                  (Math.sin(angle) * Math.sin(angle)) / (rz * rz)
+              ) +
+            margin;
+          if (r < minR) {
+            const scale = minR / r;
+            point.x = centerX + dx * scale;
+            point.z = centerZ + dz * scale;
+          }
+          return point;
+        }
+
+        // Build the list of marked hoops the traveler visits. The dot starts
+        // at Base Camp and then hops directly to each subsequent marked point
+        // (Gear Wall, Summit Log, Trail Markers, Summit) as scroll progress
+        // crosses each zone threshold, instead of sliding along the ridge trail.
         const baseCampMarker = markersRef.current.find((m) => m.zone === "about");
-        if (baseCampMarker) {
-          markerLight.position.copy(baseCampMarker.portal.position);
-          orbGlow.position.copy(baseCampMarker.portal.position);
+        const gearMarker = markersRef.current.find((m) => m.zone === "skills");
+        const summitLogMarker = markersRef.current.find(
+          (m) => m.zone === "projects"
+        );
+        const trailMarkersMarker = markersRef.current.find(
+          (m) => m.zone === "gallery"
+        );
+        if (
+          baseCampMarker &&
+          gearMarker &&
+          summitLogMarker &&
+          trailMarkersMarker &&
+          pathCurve
+        ) {
+          const summitPoint = pathCurve.getPoint(1).clone();
+          summitPoint.y += 0.8;
 
-          const start = baseCampMarker.portal.position.clone();
+          // Use the exact visible marker positions so the traveling orb passes
+          // through the hoops the user actually sees, not a separate pushed set.
+          hoopPositionsRef.current = [
+            baseCampMarker.basePosition.clone(),
+            gearMarker.basePosition.clone(),
+            summitLogMarker.basePosition.clone(),
+            trailMarkersMarker.basePosition.clone(),
+            summitPoint,
+          ];
 
-          const gearT = 0.36;
-          const gear = pathCurve.getPoint(gearT).clone();
-          gear.y += 0.5;
-          const gearOutward = new THREE.Vector3(
-            gear.x - centerX,
-            0,
-            gear.z - centerZ
-          ).normalize();
-          gear.add(gearOutward.multiplyScalar(0.6));
-
-          const startAngle = Math.atan2(start.z - centerZ, start.x - centerX);
-          const gearAngle = Math.atan2(gear.z - centerZ, gear.x - centerX);
-          const startRadius = Math.sqrt(
-            (start.x - centerX) ** 2 + (start.z - centerZ) ** 2
+          // Build a smooth curve through the exact marker hoop positions so
+          // the orb winds up and around the mountain, passing through every
+          // landmark instead of cutting through the interior.
+          const orbCurve = new THREE.CatmullRomCurve3(
+            hoopPositionsRef.current.map((p) => p.clone()),
+            false,
+            "centripetal"
           );
-          const gearRadius = Math.sqrt(
-            (gear.x - centerX) ** 2 + (gear.z - centerZ) ** 2
-          );
-          const outerR =
-            Math.max(
-              (bbox.max.x - bbox.min.x) * 0.5,
-              (bbox.max.z - bbox.min.z) * 0.5
-            ) + 1.0;
-          const midRadius = (startRadius + gearRadius) * 0.5;
-          const bulge = Math.max(0, outerR - midRadius);
+          orbCurve.arcLengthDivisions = 200;
+          orbCurveRef.current = orbCurve;
 
-          baseCampArcRef.current = {
-            start,
-            gear,
-            startAngle,
-            gearAngle,
-            startRadius,
-            gearRadius,
-            bulge,
-          };
+          const orbStart = getOrbPosition(0);
+          orbSmoothedRef.current = orbStart.clone();
+          markerLight.position.copy(orbStart);
+          orbGlow.position.copy(orbStart);
         }
 
         // ─── Climber Sprite ────────────────────────────────
@@ -1975,10 +2194,9 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
           depthWrite: false,
         });
         const climber = new THREE.Sprite(climberMat);
-        const startPos = baseCampMarker
-          ? baseCampMarker.portal.position.clone()
-          : pathCurve.getPoint(0).clone();
-        startPos.y += 0.4;
+        const startPos = orbSmoothedRef.current
+          ? orbSmoothedRef.current.clone()
+          : getOrbPosition(0).clone();
         climber.position.copy(startPos);
         climber.scale.set(0.8, 0.8, 1);
         scene.add(climber);
@@ -1989,6 +2207,8 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
         const trailGeo = new THREE.BufferGeometry();
         const trailPositions = new Float32Array(trailCount * 3);
         const trailOpacities = new Float32Array(trailCount);
+        // Warm up the trail at the climber start so it doesn't snap from the
+        // origin on the first animation frame.
         for (let i = 0; i < trailCount; i++) {
           trailPositions[i * 3] = startPos.x;
           trailPositions[i * 3 + 1] = startPos.y;
@@ -2211,8 +2431,21 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
 
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate);
-      const time = clock.getElapsedTime();
+      frameCounterRef.current += 1;
+
+      // Skip rendering when the tab is hidden. The RAF loop keeps running so
+      // we resume immediately on visibility, but we avoid GPU work.
+      if (!isVisibleRef.current) return;
+
+      // On low-end devices, render every other frame to keep the main thread
+      // responsive for scroll and input. The visual difference is subtle because
+      // the scene is mostly slow-moving atmospheric motion.
+      const frameSkip = isLowQuality ? 2 : 1;
+      if (frameCounterRef.current % frameSkip !== 0) return;
+      // Compute delta before elapsed time so getDelta() returns the true
+      // frame interval rather than the tiny gap between the two calls.
       const dt = clock.getDelta();
+      const time = clock.getElapsedTime();
 
       // Update transient reaction effects
       for (let i = effects.length - 1; i >= 0; i--) {
@@ -2346,6 +2579,21 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
       const activeZone = currentZoneRef.current;
       const trailT = Math.max(0, Math.min(1, scrollProgressRef.current));
 
+      // Raycast to detect marker hover, throttled by quality tier.
+      let hoveredMarker: (typeof markersRef.current)[number] | null = null;
+      const raycastInterval = isLowQuality ? 6 : isMediumQuality ? 3 : 1;
+      if (markersRef.current.length > 0 && frameCounterRef.current % raycastInterval === 0) {
+        raycasterRef.current.setFromCamera(pointerRef.current, camera);
+        const hitSprites = markersRef.current.map((m) => m.sprite);
+        const intersects = raycasterRef.current.intersectObjects(hitSprites);
+        if (intersects.length > 0 && intersects[0].object) {
+          const hit = intersects[0].object as THREE.Sprite;
+          hoveredMarker = markersRef.current.find((m) => m.sprite === hit) ?? null;
+        }
+      }
+      hoveredMarkerRef.current = hoveredMarker;
+      renderer.domElement.style.cursor = hoveredMarker ? "pointer" : "default";
+
       markersRef.current.forEach((m, i) => {
         const isActive = m.zone === activeZone;
         const dist = Math.abs(m.t - trailT);
@@ -2353,6 +2601,8 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
         const bobSpeed = isActive ? 2.5 : 1.2;
         const bobHeight = isActive ? 0.12 : 0.06;
         const phase = i * 1.1;
+        const isHovered = m === hoveredMarker;
+        m.hovered = isHovered;
 
         m.sprite.position.y =
           m.basePosition.y + 0.85 + Math.sin(time * bobSpeed + phase) * bobHeight;
@@ -2360,8 +2610,27 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
           m.basePosition.y - 0.78 + Math.sin(time * bobSpeed + phase) * (bobHeight * 0.3);
         m.portal!.position.y =
           m.basePosition.y + 0.65 + Math.sin(time * bobSpeed + phase) * bobHeight;
+        m.hoverRing.position.y = m.sprite.position.y;
 
         const ringMat = m.ring.material as THREE.MeshBasicMaterial;
+        const hoverRingMat = m.hoverRing.material as THREE.SpriteMaterial;
+
+        // Pokestop-style outer ring: visible on hover, spins when the hovered
+        // marker is also the currently selected zone.
+        if (isHovered && isActive) {
+          hoverRingMat.opacity = Math.min(1, hoverRingMat.opacity + 0.08);
+          m.hoverRing.rotation.z -= 0.12;
+          const hs = 1.85 + Math.sin(time * 6) * 0.04;
+          m.hoverRing.scale.set(hs, hs, 1);
+        } else if (isHovered) {
+          hoverRingMat.opacity = Math.min(0.75, hoverRingMat.opacity + 0.08);
+          m.hoverRing.rotation.z -= 0.04;
+          m.hoverRing.scale.set(1.85, 1.85, 1);
+        } else {
+          hoverRingMat.opacity = Math.max(0, hoverRingMat.opacity - 0.06);
+          m.hoverRing.scale.set(1.85, 1.85, 1);
+        }
+
         if (isActive) {
           ringMat.color.setHex(0xffc84e);
           ringMat.opacity = 0.85 + Math.sin(time * 4 + phase) * 0.15;
@@ -2389,107 +2658,53 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
         }
       });
 
-      // Compute the shared surface position for the traveling light and the
-      // climber sprite so neither one tunnels through the mountain.
+      // Drive the traveling orb smoothly between the visible marker hoops.
+      // It ascends the mountain in lock-step with scroll progress, moving
+      // Base Camp → Gear Wall → Summit Log → Trail Markers → Summit.
       const progress = Math.max(0, Math.min(1, scrollProgressRef.current));
-      const pathCurve = pathCurveRef.current;
-      const baseCampArc = baseCampArcRef.current;
-      const center = mountainCenterRef.current;
-      const arcEndProgress = 0.264;
+      let orbPos: THREE.Vector3 | null = null;
 
-      function minHorizontalRadius(angle: number): number {
-        const ext = mountainExtentsRef.current;
-        if (!ext) return 0;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        return (
-          1 /
-          Math.sqrt(
-            (cos * cos) / (ext.halfX * ext.halfX) +
-              (sin * sin) / (ext.halfZ * ext.halfZ)
-          )
-        );
-      }
-
-      function pushToSurface(point: THREE.Vector3, margin = 0.3): THREE.Vector3 {
-        const dx = point.x - center.x;
-        const dz = point.z - center.z;
-        const r = Math.sqrt(dx * dx + dz * dz);
-        if (r < 0.001) return point;
-        const angle = Math.atan2(dz, dx);
-        const minR = minHorizontalRadius(angle) + margin;
-        if (r < minR) {
-          const scale = minR / r;
-          point.x = center.x + dx * scale;
-          point.z = center.z + dz * scale;
+      const getOrbPosition = getOrbPositionRef.current;
+      if (getOrbPosition) {
+        const orbTarget = getOrbPosition(progress);
+        const smoothed = orbSmoothedRef.current;
+        if (!smoothed) {
+          orbSmoothedRef.current = orbTarget.clone();
+          orbPos = orbTarget.clone();
+        } else {
+          // Frame-rate independent lerp keeps the motion silky even if the
+          // browser drops frames or Lenis scroll velocity changes abruptly.
+          const speed = 6.0;
+          const t = 1 - Math.exp(-speed * Math.min(dt, 0.05));
+          smoothed.lerp(orbTarget, t);
+          orbPos = smoothed;
         }
-        return point;
-      }
 
-      function getTravelerTarget(p: number): THREE.Vector3 | null {
-        if (baseCampArc && p < arcEndProgress) {
-          const t = Math.max(0, Math.min(1, p / arcEndProgress));
-          const angle =
-            baseCampArc.startAngle +
-            (baseCampArc.gearAngle - baseCampArc.startAngle) * t;
-          const baseRadius =
-            baseCampArc.startRadius +
-            (baseCampArc.gearRadius - baseCampArc.startRadius) * t;
-          const radius = baseRadius + baseCampArc.bulge * Math.sin(Math.PI * t);
-          const y =
-            baseCampArc.start.y + (baseCampArc.gear.y - baseCampArc.start.y) * t;
-          const point = new THREE.Vector3(
-            center.x + Math.cos(angle) * radius,
-            y,
-            center.z + Math.sin(angle) * radius
+        if (markerLight && orbPos) {
+          markerLight.position.copy(orbPos);
+          markerLight.intensity = THREE.MathUtils.lerp(
+            markerLight.intensity,
+            prefersReducedMotion ? 0 : 3.5,
+            0.08
           );
-          return pushToSurface(point, 0.3);
-        } else if (pathCurve) {
-          let orbT: number;
-          if (p < 0.264) {
-            orbT = 0.06 + (p / 0.264) * 0.30;
-          } else {
-            orbT = 0.36 + ((p - 0.264) / 0.736) * 0.64;
-          }
-          const point = pathCurve
-            .getPoint(Math.max(0.06, Math.min(1, orbT)))
-            .clone();
-          point.y += 0.5;
-          return pushToSurface(point, 0.3);
         }
-        return null;
-      }
 
-      const orbTarget = getTravelerTarget(progress);
+        // Wide glow that follows the orb so the mountain face lights up
+        // brightly around the climber.
+        if (orbGlow && markerLight) {
+          orbGlow.position.copy(markerLight.position);
+          orbGlow.intensity = THREE.MathUtils.lerp(
+            orbGlow.intensity,
+            prefersReducedMotion ? 0 : 3.0,
+            0.06
+          );
+        }
 
-      if (markerLight && orbTarget && !prefersReducedMotion) {
-        markerLight.position.lerp(orbTarget, 0.08);
-        markerLight.intensity = THREE.MathUtils.lerp(
-          markerLight.intensity,
-          1.5 + Math.sin(time * 3) * 0.3,
-          0.08
-        );
-      } else if (markerLight) {
-        markerLight.intensity = THREE.MathUtils.lerp(markerLight.intensity, 0, 0.06);
-      }
-
-      // The traveling light casts a narrow, subtle glow on nearby rock.
-      if (orbGlow && markerLight) {
-        orbGlow.position.copy(markerLight.position);
-        orbGlow.intensity = THREE.MathUtils.lerp(
-          orbGlow.intensity,
-          orbTarget && !prefersReducedMotion ? 1.5 + Math.sin(time * 2) * 0.3 : 0,
-          0.06
-        );
-      }
-
-      // Climber sprite follows the same surface path as the traveling light
-      const climber = climberRef.current;
-      const trail = climberTrailRef.current;
-      if (climber) {
-        const pos = getTravelerTarget(progress);
-        if (pos) {
-          climber.position.copy(pos);
+        // Climber sprite sits exactly at the traveling light / hoop center.
+        const climber = climberRef.current;
+        const trail = climberTrailRef.current;
+        if (climber && orbPos) {
+          climber.position.copy(orbPos);
 
           // Trail particles
           if (trail && !prefersReducedMotion) {
@@ -2500,9 +2715,9 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
               positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
               positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
             }
-            positions[0] = pos.x;
-            positions[1] = pos.y - 0.1;
-            positions[2] = pos.z;
+            positions[0] = climber.position.x;
+            positions[1] = climber.position.y;
+            positions[2] = climber.position.z;
             trail.geometry.attributes.position.needsUpdate = true;
           }
         }
@@ -2562,6 +2777,25 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
     };
     window.addEventListener("resize", onResize);
 
+    // Pause the render loop when the tab is hidden to free the GPU/CPU.
+    const onVisibilityChange = () => {
+      isVisibleRef.current = document.visibilityState === "visible";
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Track pointer for marker hover interactions
+    const onPointerMove = (e: PointerEvent) => {
+      const rect = canvasEl.getBoundingClientRect();
+      pointerRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointerRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    };
+    const onPointerLeave = () => {
+      pointerRef.current.set(-999, -999);
+    };
+    canvasEl.addEventListener("pointermove", onPointerMove);
+    canvasEl.addEventListener("pointerleave", onPointerLeave);
+    canvasEl.style.cursor = "default";
+
     return () => {
       isCleanedUp = true;
       if (checkpointTimerRef.current) {
@@ -2569,6 +2803,9 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
       }
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      canvasEl.removeEventListener("pointermove", onPointerMove);
+      canvasEl.removeEventListener("pointerleave", onPointerLeave);
       if (st) st.kill();
       renderer.dispose();
       bgRing.traverse((child) => {
@@ -2601,6 +2838,8 @@ const Mountain3D = forwardRef<MountainHandle, object>(function Mountain3D(
           (m.portal!.material as THREE.Material).dispose();
           m.sprite.material.map?.dispose();
           (m.sprite.material as THREE.Material).dispose();
+          m.hoverRing.material.map?.dispose();
+          (m.hoverRing.material as THREE.Material).dispose();
         });
         markerGroupRef.current = null;
       }

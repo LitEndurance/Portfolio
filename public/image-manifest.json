@@ -1,0 +1,93 @@
+{
+  "10_What_Is_NestJS_And_What_Is_It_Used": {
+    "width": 1024,
+    "height": 576,
+    "png": "\\images\\10_What_Is_NestJS_And_What_Is_It_Used.png",
+    "webp": "\\images\\10_What_Is_NestJS_And_What_Is_It_Used.webp",
+    "avif": "\\images\\10_What_Is_NestJS_And_What_Is_It_Used.avif"
+  },
+  "1_Next_js_The_Framework_for_the_Modern": {
+    "width": 1100,
+    "height": 720,
+    "png": "\\images\\1_Next_js_The_Framework_for_the_Modern.png",
+    "webp": "\\images\\1_Next_js_The_Framework_for_the_Modern.webp",
+    "avif": "\\images\\1_Next_js_The_Framework_for_the_Modern.avif"
+  },
+  "2_The_Dark_Side_Of_AI_What_Enterprises": {
+    "width": 960,
+    "height": 720,
+    "png": "\\images\\2_The_Dark_Side_Of_AI_What_Enterprises.png",
+    "webp": "\\images\\2_The_Dark_Side_Of_AI_What_Enterprises.webp",
+    "avif": "\\images\\2_The_Dark_Side_Of_AI_What_Enterprises.avif"
+  },
+  "3_Nest_JS_The_official_logo_Behanc": {
+    "width": 1400,
+    "height": 1050,
+    "png": "\\images\\3_Nest_JS_The_official_logo_Behanc.png",
+    "webp": "\\images\\3_Nest_JS_The_official_logo_Behanc.webp",
+    "avif": "\\images\\3_Nest_JS_The_official_logo_Behanc.avif"
+  },
+  "4_What_is_a_Container_Docker": {
+    "width": 1200,
+    "height": 1039,
+    "png": "\\images\\4_What_is_a_Container_Docker.png",
+    "webp": "\\images\\4_What_is_a_Container_Docker.webp",
+    "avif": "\\images\\4_What_is_a_Container_Docker.avif"
+  },
+  "5_Documentation_NestJS_A_progressive": {
+    "width": 820,
+    "height": 429,
+    "png": "\\images\\5_Documentation_NestJS_A_progressive.png",
+    "webp": "\\images\\5_Documentation_NestJS_A_progressive.webp",
+    "avif": "\\images\\5_Documentation_NestJS_A_progressive.avif"
+  },
+  "6_What_is_Docker_Docker_Docs": {
+    "width": 1233,
+    "height": 651,
+    "png": "\\images\\6_What_is_Docker_Docker_Docs.png",
+    "webp": "\\images\\6_What_is_Docker_Docker_Docs.webp",
+    "avif": "\\images\\6_What_is_Docker_Docker_Docs.avif"
+  },
+  "7_The_Dark_Side_of_AI_United_States": {
+    "width": 1024,
+    "height": 512,
+    "png": "\\images\\7_The_Dark_Side_of_AI_United_States.png",
+    "webp": "\\images\\7_The_Dark_Side_of_AI_United_States.webp",
+    "avif": "\\images\\7_The_Dark_Side_of_AI_United_States.avif"
+  },
+  "8_An_Overview_of_the_Next_js_Framework": {
+    "width": 2400,
+    "height": 1078,
+    "png": "\\images\\8_An_Overview_of_the_Next_js_Framework.png",
+    "webp": "\\images\\8_An_Overview_of_the_Next_js_Framework.webp",
+    "avif": "\\images\\8_An_Overview_of_the_Next_js_Framework.avif"
+  },
+  "9_What_is_a_Container_Docker": {
+    "width": 376,
+    "height": 300,
+    "png": "\\images\\9_What_is_a_Container_Docker.png",
+    "webp": "\\images\\9_What_is_a_Container_Docker.webp",
+    "avif": "\\images\\9_What_is_a_Container_Docker.avif"
+  },
+  "caeranthil-dashboard": {
+    "width": 1873,
+    "height": 912,
+    "png": "\\screenshots\\caeranthil-dashboard.png",
+    "webp": "\\screenshots\\caeranthil-dashboard.webp",
+    "avif": "\\screenshots\\caeranthil-dashboard.avif"
+  },
+  "deepwoken-panel": {
+    "width": 1862,
+    "height": 922,
+    "png": "\\screenshots\\deepwoken-panel.png",
+    "webp": "\\screenshots\\deepwoken-panel.webp",
+    "avif": "\\screenshots\\deepwoken-panel.avif"
+  },
+  "proxmox-datacenter": {
+    "width": 1874,
+    "height": 713,
+    "png": "\\screenshots\\proxmox-datacenter.png",
+    "webp": "\\screenshots\\proxmox-datacenter.webp",
+    "avif": "\\screenshots\\proxmox-datacenter.avif"
+  }
+}

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import FadeIn from "./FadeIn";
 import SectionShell from "./SectionShell";
+import OptimizedImage from "./OptimizedImage";
 import { useScrollLock } from "@/hooks/useScrollLock";
 
 const screenshots = [
@@ -24,7 +25,7 @@ const screenshots = [
     src: "/screenshots/proxmox-datacenter.png",
     caption: "Proxmox VE — Enterprise Virtualization Cluster",
     description:
-      "Full Proxmox VE datacenter management with LXC containers, QEMU VMs, storage pools, and resource monitoring across multiple nodes with 5+ days uptime.",
+      "Full Proxmox VE datacenter management with LXC containers, QEMU VMs, storage pools, and resource monitoring across multiple nodes.",
   },
 ];
 
@@ -77,12 +78,13 @@ export default function GallerySection() {
                 className="relative overflow-hidden mb-3"
                 style={{ border: "1px solid rgba(78, 205, 196, 0.12)", borderRadius: "4px" }}
               >
-                <img
+                <OptimizedImage
                   src={shot.src}
                   alt={shot.caption}
                   className="w-full h-auto object-cover transition-all duration-700 group-hover:scale-[1.02] group-hover:opacity-100"
                   style={{ opacity: 0.9 }}
                   loading="lazy"
+                  sizes="(max-width: 768px) 100vw, 80vw"
                 />
                 <div
                   className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 flex items-center justify-center"
@@ -179,12 +181,13 @@ export default function GallerySection() {
                   }
                 }}
               >
-                <img
+                <OptimizedImage
                   src={img.src}
                   alt={img.caption}
                   className="w-full h-auto object-cover transition-all duration-500 group-hover:opacity-100 group-hover:scale-[1.03]"
                   style={{ opacity: 0.75, maxHeight: "90px" }}
                   loading="lazy"
+                  sizes="(max-width: 768px) 50vw, 25vw"
                 />
                 <div
                   className="absolute inset-0 flex items-end p-2.5"
@@ -218,11 +221,13 @@ export default function GallerySection() {
             style={{ background: "rgba(0, 0, 0, 0.92)" }}
             onClick={() => setLightbox(null)}
           >
-            <img
+            <OptimizedImage
               src={lightbox}
               alt="Expanded screenshot"
               className="max-w-[90vw] max-h-[85dvh] object-contain"
               style={{ border: "1px solid rgba(78, 205, 196, 0.15)" }}
+              loading="eager"
+              sizes="90vw"
               onClick={(e) => e.stopPropagation()}
             />
             <button

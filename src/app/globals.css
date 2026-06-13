@@ -13,9 +13,9 @@
   --color-strawberry: #e85555;
   --color-celeste-purple: #1a0f3c;
   --color-celeste-mid: #16213e;
-  --font-display: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --font-accent: "Instrument Serif", serif;
+  --font-accent: var(--font-instrument-serif), "Instrument Serif", serif;
 }
 
 @font-face {
@@ -27,6 +27,12 @@
 }
 
 html { scroll-behavior: auto; }
+
+/* Skip off-screen section painting during initial load. */
+.content-visibility-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
 
 html,
 body {

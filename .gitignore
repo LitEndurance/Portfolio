@@ -41,6 +41,7 @@ yarn-error.log*
 .playwright-mcp/
 .claude/
 .cursor/
+.tmp*
 
 # Managed skill repos (cloned by scripts/workspace)
 /skills/*/

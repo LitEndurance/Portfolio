@@ -2,6 +2,7 @@
 
 import FadeIn from "./FadeIn";
 import SectionShell from "./SectionShell";
+import OptimizedImage from "./OptimizedImage";
 
 const skillCategories = [
   {
@@ -137,12 +138,13 @@ export default function SkillsGridSection() {
                 tabIndex={0}
                 aria-label={img.label}
               >
-                <img
+                <OptimizedImage
                   src={img.src}
                   alt={img.label}
                   className="w-full h-auto object-cover transition-all duration-500 group-hover:opacity-100 group-hover:scale-[1.03]"
                   style={{ opacity: 0.75, maxHeight: "80px" }}
                   loading="lazy"
+                  sizes="(max-width: 768px) 50vw, 25vw"
                 />
                 <div
                   className="absolute inset-0 flex items-end p-3"

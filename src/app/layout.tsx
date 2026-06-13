@@ -1,5 +1,22 @@
 import type { Metadata } from "next";
+import { Inter, Instrument_Serif } from "next/font/google";
 import "./globals.css";
+import WebVitals from "@/components/WebVitals";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: "600",
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: "italic",
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "William Barnhart — Systems Administrator",
@@ -14,12 +31,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
         <meta name="referrer" content="strict-origin-when-cross-origin" />
         <meta httpEquiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet" />
+
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        {/* Preload the mountain geometry so the 3D scene initializes sooner. */}
+        <link rel="preload" href="/mountain.bin.gz" as="fetch" crossOrigin="anonymous" />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className={`antialiased ${inter.variable} ${instrumentSerif.variable}`}>
+        {children}
+        <WebVitals />
+      </body>
     </html>
   );
 }

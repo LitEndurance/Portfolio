@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 
 interface MountainBootSequenceProps {
   bootStage: "loading" | "booting" | "ready";
   onSkip?: () => void;
+  onFinished?: () => void;
+  autoSkip?: boolean;
 }
 
 const BOOT_LINES = [
@@ -16,19 +18,22 @@ const BOOT_LINES = [
   "Summit link established. Happy climbing.",
 ];
 
-const LINE_INTERVAL = 900; // ms — slow enough to read each line
-const POST_LINE_PAUSE = 600; // ms after last line before fade
-const MAX_BOOT_MS = 12000; // hard ceiling so the site always becomes interactive
+const LINE_INTERVAL = 500; // ms — brisk but readable
+const POST_LINE_PAUSE = 250; // ms after last line before fade
+const MAX_BOOT_MS = 6000; // hard ceiling so the site always becomes interactive
 
 export default function MountainBootSequence({
   bootStage,
   onSkip,
+  onFinished,
+  autoSkip = false,
 }: MountainBootSequenceProps) {
   const [visibleCount, setVisibleCount] = useState(0);
   const [exited, setExited] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [mountainReady, setMountainReady] = useState(false);
+  const finishedRef = useRef(false);
 
   useEffect(() => {
     setPrefersReducedMotion(
@@ -69,6 +74,14 @@ export default function MountainBootSequence({
     return () => clearTimeout(timer);
   }, [visibleCount, mountainReady, exited, skipped]);
 
+  // Notify the parent exactly once when the boot overlay has finished.
+  useEffect(() => {
+    if (exited && !finishedRef.current) {
+      finishedRef.current = true;
+      onFinished?.();
+    }
+  }, [exited, onFinished]);
+
   // Allow user to skip the boot sequence with a key press or the skip button.
   const skip = useCallback(() => {
     if (exited) return;
@@ -86,6 +99,12 @@ export default function MountainBootSequence({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [skip, exited]);
+
+  // Auto-skip on low-end devices so they reach content faster.
+  useEffect(() => {
+    if (!autoSkip || exited || skipped) return;
+    skip();
+  }, [autoSkip, exited, skipped, skip]);
 
   // Hard ceiling: no matter what happens with the mountain load, the boot
   // overlay must dismiss so the page becomes interactive.
