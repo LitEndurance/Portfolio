@@ -58,14 +58,19 @@ function computeTier(
   if (saveData) return "low";
   if (reducedMotion) return "low";
 
-  const slowConnection = ["slow-2g", "2g"].includes(connectionType ?? "");
-  if (slowConnection) return "low";
+  const lowConnection = ["slow-2g", "2g", "3g"].includes(connectionType ?? "");
+  if (lowConnection) return "low";
 
-  // Treat missing memory/core signals conservatively on slow connections.
+  // Missing hardware signals is common on privacy-focused browsers; default
+  // to medium so fast machines don't get locked into low quality.
+  if (memoryGb === null && cores === null) return "medium";
+
   const lowMemory = memoryGb !== null && memoryGb < 4;
   const lowCores = cores !== null && cores < 4;
+  const mediumMemory = memoryGb !== null && memoryGb < 8;
 
-  if (lowMemory || lowCores) return "medium";
+  if (lowMemory || lowCores) return "low";
+  if (mediumMemory) return "medium";
 
   return "high";
 }
@@ -104,7 +109,7 @@ export function useDeviceTier(): DeviceCapabilities {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const handleMotionChange = () => {
       setCapabilities((prev) => {
-        const next = {
+        const next: DeviceCapabilities = {
           ...prev,
           reducedMotion: reducedMotion.matches,
         };

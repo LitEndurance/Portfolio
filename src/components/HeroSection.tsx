@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useCallback } from "react";
 import type { CSSProperties } from "react";
 import { Terminal } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import ScrollIndicator from "./ScrollIndicator";
+import { useDeviceTier } from "@/hooks/useDeviceTier";
+import { throttleRaf } from "@/lib/throttleRaf";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -46,10 +48,29 @@ export default function HeroSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const { tier, reducedMotion } = useDeviceTier();
+
+  const applyTilt = useCallback((rotateX: number, rotateY: number) => {
+    const body = bodyRef.current;
+    if (!body) return;
+    body.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+  }, []);
+
+  const throttledApplyTilt = useMemo(
+    () => throttleRaf(applyTilt),
+    [applyTilt]
+  );
+
+  useEffect(() => {
+    return () => {
+      throttledApplyTilt.cancel();
+    };
+  }, [throttledApplyTilt]);
 
   // 3-D tilt on mouse move (applied to the panel body so it doesn't fight
   // with GSAP scroll transforms on the outer shell).
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (tier === "low" || reducedMotion) return;
     const body = bodyRef.current;
     if (!body) return;
     const rect = body.getBoundingClientRect();
@@ -59,10 +80,11 @@ export default function HeroSection() {
     const cy = rect.height / 2;
     const rotateX = ((y - cy) / cy) * -2.5;
     const rotateY = ((x - cx) / cx) * 2.5;
-    body.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+    throttledApplyTilt(rotateX, rotateY);
   };
 
   const handleMouseLeave = () => {
+    throttledApplyTilt.cancel();
     const body = bodyRef.current;
     if (!body) return;
     body.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg)";

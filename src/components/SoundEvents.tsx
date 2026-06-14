@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { soundEngine } from "@/lib/soundEngine";
+import { useDeviceTier } from "@/hooks/useDeviceTier";
+import { throttleRaf } from "@/lib/throttleRaf";
 
 const WOBBLE_SELECTOR = "[data-wobble]";
 const BTN_SELECTOR = "button, [role='button'], a, input[type='submit'], input[type='button']";
@@ -13,28 +15,40 @@ function isButtonLike(el: HTMLElement): boolean {
   );
 }
 
-function handleWobbleMove(e: MouseEvent) {
-  const card = (e.currentTarget as HTMLElement);
-  const rect = card.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const cx = rect.width / 2;
-  const cy = rect.height / 2;
-  const rotateX = ((y - cy) / cy) * -4;
-  const rotateY = ((x - cx) / cx) * 4;
+function applyWobble(card: HTMLElement, rotateX: number, rotateY: number) {
   card.style.transform = `perspective(600px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
 }
 
+const throttledApplyWobble = throttleRaf(applyWobble);
+
 function handleWobbleLeave(e: MouseEvent) {
-  const card = (e.currentTarget as HTMLElement);
+  const card = e.currentTarget as HTMLElement;
   card.style.transform = "perspective(600px) rotateX(0deg) rotateY(0deg) scale(1)";
 }
 
 export default function SoundEvents() {
+  const { tier, reducedMotion } = useDeviceTier();
+
   useEffect(() => {
     if (typeof document === "undefined") return;
 
+    const wobbleEnabled = tier !== "low" && !reducedMotion;
     let lastHoverEl: HTMLElement | null = null;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!wobbleEnabled) return;
+      const target = e.target as HTMLElement;
+      const card = target.closest(WOBBLE_SELECTOR) as HTMLElement | null;
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const rotateX = ((y - cy) / cy) * -4;
+      const rotateY = ((x - cx) / cx) * 4;
+      throttledApplyWobble(card, rotateX, rotateY);
+    };
 
     const onMouseOver = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -77,28 +91,34 @@ export default function SoundEvents() {
       }
     };
 
-    // Attach wobble listeners to existing cards
-    const cards = Array.from(document.querySelectorAll(WOBBLE_SELECTOR)) as HTMLElement[];
-    cards.forEach((card) => {
-      card.style.transition = "transform 0.15s ease-out";
-      card.addEventListener("mousemove", handleWobbleMove);
-      card.addEventListener("mouseleave", handleWobbleLeave);
-    });
-
+    document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseover", onMouseOver);
     document.addEventListener("click", onClick);
     document.addEventListener("mouseout", onMouseOut);
 
+    // Attach leave listeners only when wobble is enabled so the transform
+    // reset doesn't run (and conflict) on low-tier/reduced-motion devices.
+    const cards: HTMLElement[] = [];
+    if (wobbleEnabled) {
+      document.querySelectorAll(WOBBLE_SELECTOR).forEach((card) => {
+        const el = card as HTMLElement;
+        el.style.transition = "transform 0.15s ease-out";
+        el.addEventListener("mouseleave", handleWobbleLeave);
+        cards.push(el);
+      });
+    }
+
     return () => {
+      throttledApplyWobble.cancel();
+      document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseover", onMouseOver);
       document.removeEventListener("click", onClick);
       document.removeEventListener("mouseout", onMouseOut);
       cards.forEach((card) => {
-        card.removeEventListener("mousemove", handleWobbleMove);
         card.removeEventListener("mouseleave", handleWobbleLeave);
       });
     };
-  }, []);
+  }, [tier, reducedMotion]);
 
   return null;
 }

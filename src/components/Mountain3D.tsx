@@ -5,7 +5,6 @@ import React, {
   useEffect,
   forwardRef,
   useImperativeHandle,
-  useCallback,
 } from "react";
 import * as THREE from "three";
 // Mountain loaded from pre-processed binary (see scripts/process-mountain.cjs)
@@ -15,31 +14,23 @@ import { soundEngine } from "@/lib/soundEngine";
 import { useClimb, type Zone } from "@/components/ClimbContext";
 import { ZONES, progressToZone, zoneTrailT } from "@/components/zoneConfig";
 import type { DeviceTier } from "@/hooks/useDeviceTier";
+import { getQualityProfile } from "@/lib/mountain/quality";
+import {
+  createRenderer,
+  createCamera,
+  createLights,
+  createSkyGradient,
+} from "@/lib/mountain/scene";
+import {
+  createUnifiedParticles,
+  TransientParticlePool,
+  createClimberTrail,
+  type ClimberTrail,
+} from "@/lib/mountain/particles";
+import { MarkerRaycaster } from "@/lib/mountain/raycaster";
+import type { Marker, ParticleBounds } from "@/lib/mountain/types";
 
 gsap.registerPlugin(ScrollTrigger);
-
-const SKY_TOP = 0x101440;
-const SKY_MID = 0x201860;
-const SKY_BOTTOM = 0x402860;
-
-function createSkyGradient(): THREE.CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 32;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d")!;
-
-  const grad = ctx.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, `#${new THREE.Color(SKY_TOP).getHexString()}`);
-  grad.addColorStop(0.45, `#${new THREE.Color(SKY_MID).getHexString()}`);
-  grad.addColorStop(1, `#${new THREE.Color(SKY_BOTTOM).getHexString()}`);
-
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 32, 512);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
 
 // ─── Celeste Color Palette ──────────────────────────────
 // Darker, moodier take on the mountain: deep blue-purple shadows,
@@ -441,6 +432,12 @@ function createBackgroundMountainRing(
 
 // ─── Aurora ─────────────────────────────────────────────
 
+interface AuroraMeshUserData {
+  phase: number;
+  baseX: number;
+  baseZ: number;
+}
+
 function createAurora(): THREE.Group {
   const group = new THREE.Group();
   const colors = [0x40ffaa, 0x40e0ff, 0x8060ff];
@@ -481,141 +478,21 @@ function createAurora(): THREE.Group {
     mesh.position.set(-22 + i * 8, 16, -45);
     mesh.rotation.y = -0.2 + i * 0.15;
     mesh.rotation.z = 0.05 + i * 0.03;
-    (mesh as any).phase = i * 1.2;
-    (mesh as any).baseX = mesh.position.x;
-    (mesh as any).baseZ = mesh.position.z;
+    mesh.userData = {
+      phase: i * 1.2,
+      baseX: mesh.position.x,
+      baseZ: mesh.position.z,
+    } satisfies AuroraMeshUserData;
     group.add(mesh);
   }
 
   return group;
 }
 
-// ─── Snow ───────────────────────────────────────────────
-// Slow 3D snow that falls through the mountain environment. Particles are
-// reset to the top of the volume when they drift below the base, so the
-// snowfall is continuous and feels part of the world.
-
-function createSnow(count: number): THREE.Points {
-  const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const basePositions = new Float32Array(count * 3);
-  const velocities: number[] = [];
-  const phases: number[] = [];
-
-  // Placeholder volume; repositionSnowInEnvironment will set the real
-  // bounds once the mountain binary has loaded.
-  const xRange = 60;
-  const yRange = 40;
-  const zRange = 60;
-
-  for (let i = 0; i < count; i++) {
-    const x = (Math.random() - 0.5) * xRange;
-    const y = (Math.random() - 0.5) * yRange;
-    const z = (Math.random() - 0.5) * zRange;
-
-    positions[i * 3] = x;
-    positions[i * 3 + 1] = y;
-    positions[i * 3 + 2] = z;
-
-    basePositions[i * 3] = x;
-    basePositions[i * 3 + 1] = y;
-    basePositions[i * 3 + 2] = z;
-
-    velocities.push(
-      (Math.random() - 0.5) * 0.002,
-      -(Math.random() * 0.015 + 0.01), // slow, gentle fall
-      (Math.random() - 0.5) * 0.002
-    );
-    phases.push(Math.random() * Math.PI * 2);
-  }
-
-  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0xd8e8f8,
-    size: 0.1,
-    transparent: true,
-    opacity: 0.55,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    sizeAttenuation: true,
-  });
-
-  const points = new THREE.Points(geo, mat);
-  (points as any).velocities = velocities;
-  (points as any).basePositions = basePositions;
-  (points as any).phases = phases;
-  return points;
-}
-
-function repositionSnowInEnvironment(
-  snow: THREE.Points,
-  count: number,
-  highestX: number,
-  summitY: number,
-  highestZ: number,
-  baseY: number
-) {
-  const positions = snow.geometry.attributes.position.array as Float32Array;
-  const basePositions = (snow as any).basePositions as Float32Array;
-
-  const topY = summitY + 10;
-  const heightRange = Math.max(1, topY - baseY);
-  const xRange = 60;
-  const zRange = 60;
-
-  for (let i = 0; i < count; i++) {
-    const x = highestX + (Math.random() - 0.5) * xRange;
-    const y = baseY + Math.random() * heightRange;
-    const z = highestZ + (Math.random() - 0.5) * zRange;
-
-    const ix = i * 3;
-    positions[ix] = x;
-    positions[ix + 1] = y;
-    positions[ix + 2] = z;
-
-    basePositions[ix] = x;
-    basePositions[ix + 1] = y;
-    basePositions[ix + 2] = z;
-  }
-
-  (snow as any).topY = topY;
-  (snow as any).baseY = baseY;
-  (snow as any).xRange = xRange;
-  (snow as any).zRange = zRange;
-  (snow as any).spawnX = highestX;
-  (snow as any).spawnZ = highestZ;
-  snow.geometry.attributes.position.needsUpdate = true;
-}
-
-// ─── Stars ──────────────────────────────────────────────
-
-function createStars(count: number): THREE.Points {
-  const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-
-  for (let i = 0; i < count; i++) {
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.random() * Math.PI * 0.55;
-    const r = 50 + Math.random() * 50;
-    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-    positions[i * 3 + 1] = r * Math.cos(phi) + 10;
-    positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-  }
-
-  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0xd0d8f0,
-    size: 0.1,
-    transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    sizeAttenuation: true,
-  });
-
-  return new THREE.Points(geo, mat);
+interface CloudSpriteUserData {
+  speed: number;
+  startX: number;
+  parallax: number;
 }
 
 // ─── Clouds ─────────────────────────────────────────────
@@ -657,7 +534,7 @@ function createCloudTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-function createClouds(): THREE.Group {
+function createClouds(count: number): THREE.Group {
   const group = new THREE.Group();
   const texture = createCloudTexture();
 
@@ -672,7 +549,7 @@ function createClouds(): THREE.Group {
     { x: 4, y: 7, z: -4, scale: 14, speed: 0.8, parallax: 0.45 },
   ];
 
-  for (const data of cloudData) {
+  for (const data of cloudData.slice(0, count)) {
     const mat = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
@@ -684,20 +561,28 @@ function createClouds(): THREE.Group {
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(data.scale, data.scale * 0.45, 1);
     sprite.position.set(data.x, data.y, data.z);
-    (sprite as any).speed = data.speed;
-    (sprite as any).startX = data.x;
-    (sprite as any).parallax = data.parallax;
+    sprite.userData = {
+      speed: data.speed,
+      startX: data.x,
+      parallax: data.parallax,
+    } satisfies CloudSpriteUserData;
     group.add(sprite);
   }
 
   return group;
 }
 
+interface MistSpriteUserData {
+  phase: number;
+  baseX: number;
+  baseZ: number;
+}
+
 // ─── Mountain Mist ──────────────────────────────────────
 // Soft sprite-based fog pooled around the mountain base so it
 // reads as atmospheric depth rather than scattered particles.
 
-function createMountainMist(): THREE.Group {
+function createMountainMist(count: number): THREE.Group {
   const group = new THREE.Group();
   const mistData = [
     { x: 0, z: -9, scale: 28 },
@@ -710,7 +595,7 @@ function createMountainMist(): THREE.Group {
     { x: -18, z: -9, scale: 20 },
   ];
 
-  for (const data of mistData) {
+  for (const data of mistData.slice(0, count)) {
     const canvas = document.createElement("canvas");
     canvas.width = 256;
     canvas.height = 256;
@@ -736,9 +621,11 @@ function createMountainMist(): THREE.Group {
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(data.scale, data.scale * 0.35, 1);
     sprite.position.set(data.x, -7.3, data.z);
-    (sprite as any).phase = Math.random() * Math.PI * 2;
-    (sprite as any).baseX = data.x;
-    (sprite as any).baseZ = data.z;
+    sprite.userData = {
+      phase: Math.random() * Math.PI * 2,
+      baseX: data.x,
+      baseZ: data.z,
+    } satisfies MistSpriteUserData;
     group.add(sprite);
   }
 
@@ -1106,45 +993,6 @@ function createClimberTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-function createSummitParticles(count: number): THREE.Points {
-  const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const velocities: number[] = [];
-  const lifes: number[] = [];
-
-  for (let i = 0; i < count; i++) {
-    positions[i * 3] = 0;
-    positions[i * 3 + 1] = 0;
-    positions[i * 3 + 2] = 0;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.random() * Math.PI;
-    const speed = 0.02 + Math.random() * 0.06;
-    velocities.push(
-      Math.sin(phi) * Math.cos(theta) * speed,
-      Math.cos(phi) * speed + 0.02,
-      Math.sin(phi) * Math.sin(theta) * speed
-    );
-    lifes.push(Math.random());
-  }
-
-  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0x4ecdc4,
-    size: 0.18,
-    transparent: true,
-    opacity: 0.9,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    sizeAttenuation: true,
-  });
-
-  const points = new THREE.Points(geo, mat);
-  (points as any).velocities = velocities;
-  (points as any).lifes = lifes;
-  return points;
-}
-
 // ─── Reaction Texture Helpers ───────────────────────────
 
 function createSquareTexture(
@@ -1250,28 +1098,15 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
   const hoopPositionsRef = useRef<THREE.Vector3[]>([]);
   const orbCurveRef = useRef<THREE.CatmullRomCurve3 | null>(null);
   const orbSmoothedRef = useRef<THREE.Vector3 | null>(null);
+  const cameraSmoothedPositionRef = useRef<THREE.Vector3 | null>(null);
+  const cameraSmoothedLookAtRef = useRef<THREE.Vector3 | null>(null);
+  const cameraTargetLookAtRef = useRef<THREE.Vector3 | null>(null);
   const getOrbPositionRef = useRef<((progress: number) => THREE.Vector3) | null>(null);
   const mountainCenterRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
-  const markersRef = useRef<
-    {
-      group: THREE.Group;
-      ring: THREE.Mesh;
-      portal: THREE.Sprite;
-      sprite: THREE.Sprite;
-      hoverRing: THREE.Sprite;
-      zone: Zone;
-      basePosition: THREE.Vector3;
-      t: number;
-      hovered: boolean;
-    }[]
-  >([]);
-  const raycasterRef = useRef(new THREE.Raycaster());
-  const pointerRef = useRef(new THREE.Vector2(-999, -999));
-  const hoveredMarkerRef = useRef<(typeof markersRef.current)[number] | null>(null);
+  const markersRef = useRef<Marker[]>([]);
   const climberRef = useRef<THREE.Sprite | null>(null);
-  const climberTrailRef = useRef<THREE.Points | null>(null);
   const flagRef = useRef<THREE.Sprite | null>(null);
-  const summitParticlesRef = useRef<THREE.Points | null>(null);
+  const burstPoolRef = useRef<TransientParticlePool | null>(null);
   const flagSpawnedRef = useRef(false);
   const markerGroupRef = useRef<THREE.Group | null>(null);
   const currentZoneRef = useRef<Zone | null>(currentZone);
@@ -1303,129 +1138,65 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    // Quality-driven defaults. Reduced motion is treated as a low-energy request.
-    const isLowQuality = quality === "low" || prefersReducedMotion;
-    const isMediumQuality = quality === "medium" && !prefersReducedMotion;
-
-    const enableAntialias = quality === "high";
-    const pixelRatioCap = isLowQuality ? 1 : isMediumQuality ? 1.5 : 2;
-    const enableShadows = quality !== "low";
-    const shadowMapSize = isMediumQuality ? 1024 : 2048;
-    const snowCountBase = isLowQuality ? 80 : isMediumQuality ? 500 : 2000;
-    const starCountBase = isLowQuality ? 100 : isMediumQuality ? 400 : 1000;
+    const profile = getQualityProfile(quality, prefersReducedMotion);
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     scene.background = createSkyGradient();
     scene.fog = new THREE.FogExp2(0x201850, 0.012);
 
-    const camera = new THREE.PerspectiveCamera(
-      55,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      200
-    );
+    const camera = createCamera(window.innerWidth, window.innerHeight);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: enableAntialias, alpha: false });
+    const renderer = createRenderer(profile);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioCap));
-    renderer.setClearColor(SKY_BOTTOM, 1);
-    renderer.shadowMap.enabled = enableShadows;
-    renderer.shadowMap.type = enableShadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
-    // ACES tone mapping is expensive; fall back to cheaper Reinhard on low-end.
-    renderer.toneMapping = isLowQuality
-      ? THREE.ReinhardToneMapping
-      : THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
     container.appendChild(renderer.domElement);
     const canvasEl = renderer.domElement;
 
     // ─── Lighting ──────────────────────────────────────
-    // Dark, moody Celeste style: low ambient, a strong directional key light
-    // cast from the moon/orb, and subtle fills for readability.
-    const ambient = new THREE.AmbientLight(0x303450, 1.30);
-    scene.add(ambient);
-
-    // Warm fill from front-right to keep shadowed faces barely readable
-    const fill = new THREE.DirectionalLight(0x504060, 0.35);
-    fill.position.set(12, 6, 10);
-    if (!isLowQuality) scene.add(fill);
-
-    // Soft cyan rim from behind
-    const rim = new THREE.DirectionalLight(0x50a0b0, 0.60);
-    rim.position.set(-6, 8, -16);
-    if (!isLowQuality) scene.add(rim);
-
-    // Subtle camera-aligned fill so the mountain remains readable from every
-    // scroll-driven viewpoint without flattening the soft moonlight.
-    const cameraLight = new THREE.DirectionalLight(0x8090a8, 1.6);
-    scene.add(cameraLight);
-
-    const summitLight = new THREE.PointLight(0x60e0f8, 2.5, 30);
-    summitLight.position.set(-2, 18, 0);
-    scene.add(summitLight);
-
-    // Bright cyan point light that travels along the ridge trail with the
-    // climber. Higher intensity and range so it reads clearly against the
-    // dark mountain surface and casts a vivid glow on nearby rock.
-    const markerLight = new THREE.PointLight(0x5ee0e8, 0, 36);
-    scene.add(markerLight);
-
-    // The traveling light has no visible sprite — only the point light and its
-    // subtle glow on the mountain surface.
-
-    // The big halo around the orb is intentionally omitted so only the small
-    // traveling light remains visible.
+    const lights = createLights(profile);
+    lights.addTo(scene);
+    const { cameraLight, summitLight, markerLight, orbGlow } = lights;
 
     // ─── Background Mountains ──────────────────────────
     // Full 360° ring of silhouetted peaks surrounding the main mountain
-    const bgRing = createBackgroundMountainRing(isLowQuality, isMediumQuality);
+    const bgRing = createBackgroundMountainRing(
+      profile.tier === "low",
+      profile.tier === "medium"
+    );
     scene.add(bgRing);
 
     // ─── Base Terrain ──────────────────────────────────
     // Rolling ground that rises to meet the mountain base
-    const baseTerrain = createBaseTerrain(isLowQuality, isMediumQuality);
-    baseTerrain.receiveShadow = enableShadows;
+    const baseTerrain = createBaseTerrain(
+      profile.tier === "low",
+      profile.tier === "medium"
+    );
+    baseTerrain.receiveShadow = profile.shadows;
     scene.add(baseTerrain);
 
-    // ─── Atmosphere (no terrain dependency) ────────────
-    // Soft static moon fill so the mountain retains shape without flattening.
-    const moonLight = new THREE.DirectionalLight(0x90d8ff, 2.2);
-    moonLight.position.set(-24, 32, -4);
-    moonLight.target.position.set(0, 2, -8);
-    moonLight.castShadow = true;
-    moonLight.shadow.mapSize.width = shadowMapSize;
-    moonLight.shadow.mapSize.height = shadowMapSize;
-    moonLight.shadow.camera.near = 1;
-    moonLight.shadow.camera.far = 140;
-    moonLight.shadow.camera.left = -40;
-    moonLight.shadow.camera.right = 40;
-    moonLight.shadow.camera.top = 40;
-    moonLight.shadow.camera.bottom = -40;
-    moonLight.shadow.bias = -0.0005;
-    scene.add(moonLight);
-    scene.add(moonLight.target);
+    const aurora = profile.enableAurora ? createAurora() : null;
+    if (aurora) scene.add(aurora);
 
-    // Wide, bright glow from the traveling light so the orb leaves a vivid
-    // luminous footprint on the mountain as it ascends.
-    const orbGlow = new THREE.PointLight(0x90e8ff, 0, 60);
-    orbGlow.position.set(0, 0, 0);
-    scene.add(orbGlow);
+    // Unified snow + stars
+    const initialBounds: ParticleBounds = {
+      centerX: 0,
+      centerZ: -9,
+      baseY: -10,
+      topY: 30,
+      xRange: 60,
+      zRange: 60,
+    };
+    const particles = createUnifiedParticles(profile, initialBounds);
+    scene.add(particles.points);
 
-    const aurora = createAurora();
-    scene.add(aurora);
+    // Shared transient burst pool for checkpoint and summit effects
+    const burstPool = new TransientParticlePool(300, scene, profile);
+    burstPoolRef.current = burstPool;
 
-    const snowCount = snowCountBase;
-    const snow = createSnow(snowCount);
-    scene.add(snow);
-
-    const stars = createStars(starCountBase);
-    scene.add(stars);
-
-    const clouds = createClouds();
+    const clouds = createClouds(profile.cloudCount);
     scene.add(clouds);
 
-    const mountainMist = createMountainMist();
+    const mountainMist = createMountainMist(profile.mistCount);
     scene.add(mountainMist);
 
     const atmoGlow = createAtmosphericGlow();
@@ -1436,6 +1207,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     let mountainMesh: THREE.Mesh | null = null;
     let isCleanedUp = false;
     let cameraBasePosition = new THREE.Vector3();
+    let trail: ClimberTrail | null = null;
+    let markerRaycaster: MarkerRaycaster | null = null;
 
     // ─── Reaction System ───────────────────────────────
     const reactionGroup = new THREE.Group();
@@ -1489,63 +1262,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       color: THREE.ColorRepresentation,
       count: number
     ) {
-      if (prefersReducedMotion) count = Math.min(count, 6);
-      const geo = new THREE.BufferGeometry();
-      const positions = new Float32Array(count * 3);
-      const velocities: THREE.Vector3[] = [];
-      const startOffsets: number[] = [];
-      for (let i = 0; i < count; i++) {
-        positions[i * 3] = position.x;
-        positions[i * 3 + 1] = position.y;
-        positions[i * 3 + 2] = position.z;
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * Math.PI;
-        const speed = 0.02 + Math.random() * 0.05;
-        velocities.push(
-          new THREE.Vector3(
-            Math.sin(phi) * Math.cos(theta) * speed,
-            Math.cos(phi) * speed + 0.02,
-            Math.sin(phi) * Math.sin(theta) * speed
-          )
-        );
-        startOffsets.push(Math.random() * 0.3);
-      }
-      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      const mat = new THREE.PointsMaterial({
-        color,
-        size: 0.12,
-        transparent: true,
-        opacity: 1,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        sizeAttenuation: true,
-      });
-      const points = new THREE.Points(geo, mat);
-      reactionGroup.add(points);
-      effects.push({
-        mesh: points,
-        born: clock.getElapsedTime(),
-        lifetime: 1.5,
-        update: (_dt, age) => {
-          const pos = geo.attributes.position.array as Float32Array;
-          for (let i = 0; i < count; i++) {
-            const ix = i * 3;
-            if (age < startOffsets[i]) continue;
-            pos[ix] += velocities[i].x;
-            pos[ix + 1] += velocities[i].y;
-            pos[ix + 2] += velocities[i].z;
-            velocities[i].y -= 0.001;
-          }
-          geo.attributes.position.needsUpdate = true;
-          mat.opacity = Math.max(0, 1 - age / 1.2);
-          return true;
-        },
-        dispose: () => {
-          reactionGroup.remove(points);
-          geo.dispose();
-          mat.dispose();
-        },
-      });
+      burstPool.burst({ position, color, count });
     }
 
     function spawnFloatingSquares(position: THREE.Vector3, count: number) {
@@ -1778,9 +1495,16 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         const summitY = highestY + sinkY;
         summitPos = new THREE.Vector3(highestX, summitY, highestZ);
 
-        // Position snow throughout the 3D mountain environment.
+        // Reposition unified particles around the loaded mountain.
         const snowBaseY = -10.0;
-        repositionSnowInEnvironment(snow, snowCount, highestX, summitY, highestZ, snowBaseY);
+        particles.setBounds({
+          centerX: highestX,
+          centerZ: highestZ,
+          baseY: snowBaseY,
+          topY: summitY + 10,
+          xRange: 60,
+          zRange: 60,
+        });
 
         // Mountain bounding box for camera framing
         const bbox = geometry.boundingBox!;
@@ -1948,14 +1672,11 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         updateCamera = (progress: number) => {
           const pose = getCameraPose(progress);
           cameraBasePosition.copy(pose.pos);
-          camera.position.copy(pose.pos);
-          camera.lookAt(pose.lookAt);
+          cameraTargetLookAtRef.current = pose.lookAt;
 
-          if (cameraLight) {
-            cameraLight.position.copy(pose.pos);
-            cameraLight.target.position.copy(pose.lookAt);
-            cameraLight.target.updateMatrixWorld();
-          }
+          // The actual camera position/lookAt are smoothed in the animation
+          // loop so tiny scroll settling jitters don't translate directly to
+          // the camera.
 
           // Moon fill is kept static; the traveling ridge orb is now the
           // moving light source and its glow is updated in the animation loop.
@@ -2107,6 +1828,9 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           });
         });
 
+        // Raycaster for marker hover interactions
+        markerRaycaster = new MarkerRaycaster(camera, markersRef.current);
+
         // Surface-pushing helper for the construction phase (uses the same
         // bounding-ellipse logic as the animation loop).
         function pushToSurfaceConstruction(
@@ -2203,33 +1927,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         climberRef.current = climber;
 
         // ─── Climber Trail Particles ───────────────────────
-        const trailCount = 40;
-        const trailGeo = new THREE.BufferGeometry();
-        const trailPositions = new Float32Array(trailCount * 3);
-        const trailOpacities = new Float32Array(trailCount);
-        // Warm up the trail at the climber start so it doesn't snap from the
-        // origin on the first animation frame.
-        for (let i = 0; i < trailCount; i++) {
-          trailPositions[i * 3] = startPos.x;
-          trailPositions[i * 3 + 1] = startPos.y;
-          trailPositions[i * 3 + 2] = startPos.z;
-          trailOpacities[i] = 0;
-        }
-        trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPositions, 3));
-        trailGeo.setAttribute("alpha", new THREE.BufferAttribute(trailOpacities, 1));
-
-        const trailMat = new THREE.PointsMaterial({
-          color: 0x4ecdc4,
-          size: 0.12,
-          transparent: true,
-          opacity: 0.55,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          sizeAttenuation: true,
-        });
-        const trail = new THREE.Points(trailGeo, trailMat);
-        scene.add(trail);
-        climberTrailRef.current = trail;
+        trail = createClimberTrail(profile);
+        scene.add(trail.points);
 
         // ScrollTrigger
         st = ScrollTrigger.create({
@@ -2437,11 +2136,6 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       // we resume immediately on visibility, but we avoid GPU work.
       if (!isVisibleRef.current) return;
 
-      // On low-end devices, render every other frame to keep the main thread
-      // responsive for scroll and input. The visual difference is subtle because
-      // the scene is mostly slow-moving atmospheric motion.
-      const frameSkip = isLowQuality ? 2 : 1;
-      if (frameCounterRef.current % frameSkip !== 0) return;
       // Compute delta before elapsed time so getDelta() returns the true
       // frame interval rather than the tiny gap between the two calls.
       const dt = clock.getDelta();
@@ -2459,11 +2153,12 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       }
 
       // Aurora drift
-      aurora.children.forEach((child) => {
+      if (aurora) aurora.children.forEach((child) => {
         if (child instanceof THREE.Mesh) {
-          const phase = (child as any).phase || 0;
-          const baseX = (child as any).baseX || child.position.x;
-          const baseZ = (child as any).baseZ || child.position.z;
+          const data = child.userData as AuroraMeshUserData;
+          const phase = data.phase ?? 0;
+          const baseX = data.baseX ?? child.position.x;
+          const baseZ = data.baseZ ?? child.position.z;
           child.position.x = baseX + Math.sin(time * 0.15 + phase) * 2.5;
           child.position.z = baseZ + Math.cos(time * 0.12 + phase) * 1.5;
           child.material.opacity = 0.35 + Math.sin(time * 0.3 + phase) * 0.15;
@@ -2473,7 +2168,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       // Aurora reaction override
       if (auroraOverride.active) {
         const age = time - auroraOverride.startTime;
-        if (age < auroraOverride.duration) {
+        if (age < auroraOverride.duration && aurora) {
           aurora.children.forEach((child) => {
             if (child instanceof THREE.Mesh) {
               child.material.color.copy(auroraOverride.color);
@@ -2483,7 +2178,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
               );
             }
           });
-        } else {
+        } else if (aurora) {
           aurora.children.forEach((child, i) => {
             if (child instanceof THREE.Mesh) {
               const colors = [0x40ffaa, 0x40e0ff, 0x8060ff];
@@ -2495,42 +2190,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         }
       }
 
-      // Snow
-      // Slow 3D snowfall through the mountain environment. Particles fall
-      // downward in world space and reset to the top when they pass below
-      // the base.
-      if (!prefersReducedMotion) {
-        const positions = snow.geometry.attributes.position.array as Float32Array;
-        const velocities = (snow as any).velocities as number[];
-        const topY = ((snow as any).topY as number) ?? 30;
-        const baseY = ((snow as any).baseY as number) ?? -10;
-        const xRange = ((snow as any).xRange as number) ?? 60;
-        const zRange = ((snow as any).zRange as number) ?? 60;
-        const spawnX = ((snow as any).spawnX as number) ?? 0;
-        const spawnZ = ((snow as any).spawnZ as number) ?? -9;
-
-        for (let i = 0; i < snowCount; i++) {
-          const ix = i * 3;
-          const vx = velocities[ix];
-          const vy = velocities[ix + 1];
-          const vz = velocities[ix + 2];
-
-          positions[ix] += vx;
-          positions[ix + 1] += vy;
-          positions[ix + 2] += vz;
-
-          // Reset to the top when it falls below the base.
-          if (positions[ix + 1] < baseY - 2) {
-            positions[ix] = spawnX + (Math.random() - 0.5) * xRange;
-            positions[ix + 1] = topY + Math.random() * 4;
-            positions[ix + 2] = spawnZ + (Math.random() - 0.5) * zRange;
-          }
-        }
-        snow.geometry.attributes.position.needsUpdate = true;
-      }
-
-      // Stars twinkle
-      (stars.material as THREE.PointsMaterial).opacity = 0.4 + Math.sin(time * 0.6) * 0.15;
+      // Unified snow + stars
+      particles.update(time);
 
       // Summit light pulse + flare
       let baseIntensity = 2.0 + Math.sin(time * 1.0) * 0.5;
@@ -2551,9 +2212,10 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       // Cloud drift — slow, consistent horizontal drift with wrap-around
       clouds.children.forEach((child) => {
         if (child instanceof THREE.Sprite) {
-          const speed = (child as any).speed || 0.2;
-          const startX = (child as any).startX || 0;
-          const parallax = (child as any).parallax || 0.4;
+          const data = child.userData as CloudSpriteUserData;
+          const speed = data.speed ?? 0.2;
+          const startX = data.startX ?? 0;
+          const parallax = data.parallax ?? 0.4;
           const range = 70;
           const drift = ((time * speed * parallax * 0.5) % range);
           child.position.x = startX + drift;
@@ -2566,9 +2228,10 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       // Mountain mist drift
       mountainMist.children.forEach((child) => {
         if (child instanceof THREE.Sprite) {
-          const phase = (child as any).phase || 0;
-          const baseX = (child as any).baseX || child.position.x;
-          const baseZ = (child as any).baseZ || child.position.z;
+          const data = child.userData as MistSpriteUserData;
+          const phase = data.phase ?? 0;
+          const baseX = data.baseX ?? child.position.x;
+          const baseZ = data.baseZ ?? child.position.z;
           child.position.x = baseX + Math.sin(time * 0.08 + phase) * 1.2;
           child.position.z = baseZ + Math.cos(time * 0.06 + phase) * 0.8;
           child.material.opacity = 0.5 + Math.sin(time * 0.2 + phase) * 0.12;
@@ -2579,19 +2242,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       const activeZone = currentZoneRef.current;
       const trailT = Math.max(0, Math.min(1, scrollProgressRef.current));
 
-      // Raycast to detect marker hover, throttled by quality tier.
-      let hoveredMarker: (typeof markersRef.current)[number] | null = null;
-      const raycastInterval = isLowQuality ? 6 : isMediumQuality ? 3 : 1;
-      if (markersRef.current.length > 0 && frameCounterRef.current % raycastInterval === 0) {
-        raycasterRef.current.setFromCamera(pointerRef.current, camera);
-        const hitSprites = markersRef.current.map((m) => m.sprite);
-        const intersects = raycasterRef.current.intersectObjects(hitSprites);
-        if (intersects.length > 0 && intersects[0].object) {
-          const hit = intersects[0].object as THREE.Sprite;
-          hoveredMarker = markersRef.current.find((m) => m.sprite === hit) ?? null;
-        }
-      }
-      hoveredMarkerRef.current = hoveredMarker;
+      // Marker hover state is maintained by the off-loop raycaster.
+      const hoveredMarker = markerRaycaster?.getHoveredMarker() ?? null;
       renderer.domElement.style.cursor = hoveredMarker ? "pointer" : "default";
 
       markersRef.current.forEach((m, i) => {
@@ -2702,66 +2354,58 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
 
         // Climber sprite sits exactly at the traveling light / hoop center.
         const climber = climberRef.current;
-        const trail = climberTrailRef.current;
         if (climber && orbPos) {
           climber.position.copy(orbPos);
 
           // Trail particles
-          if (trail && !prefersReducedMotion) {
-            const positions = trail.geometry.attributes.position.array as Float32Array;
-            const trailCount = positions.length / 3;
-            for (let i = trailCount - 1; i > 0; i--) {
-              positions[i * 3] = positions[(i - 1) * 3];
-              positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
-              positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
-            }
-            positions[0] = climber.position.x;
-            positions[1] = climber.position.y;
-            positions[2] = climber.position.z;
-            trail.geometry.attributes.position.needsUpdate = true;
+          if (!prefersReducedMotion) {
+            trail?.push(climber.position);
           }
         }
       }
 
-      // Summit flag particles
-      const summitParticles = summitParticlesRef.current;
-      if (summitParticles && !prefersReducedMotion) {
-        const positions = summitParticles.geometry.attributes.position.array as Float32Array;
-        const velocities = (summitParticles as any).velocities as number[];
-        const lifes = (summitParticles as any).lifes as number[];
-        const mat = summitParticles.material as THREE.PointsMaterial;
-        let aliveCount = 0;
-        for (let i = 0; i < lifes.length; i++) {
-          lifes[i] -= 0.015;
-          if (lifes[i] > 0) {
-            positions[i * 3] += velocities[i * 3];
-            positions[i * 3 + 1] += velocities[i * 3 + 1];
-            positions[i * 3 + 2] += velocities[i * 3 + 2];
-            aliveCount++;
-          } else {
-            positions[i * 3] = 0;
-            positions[i * 3 + 1] = 0;
-            positions[i * 3 + 2] = 0;
-          }
+      // Transient burst pool updates (checkpoint sparks, summit celebration)
+      burstPool.update(time, dt);
+
+      // Smooth camera position/lookAt so scroll settling doesn't jitter.
+      const targetLookAt = cameraTargetLookAtRef.current;
+      if (targetLookAt) {
+        const camSpeed = 8.0;
+        const camT = 1 - Math.exp(-camSpeed * Math.min(dt, 0.05));
+
+        let smoothedPos = cameraSmoothedPositionRef.current;
+        if (!smoothedPos) {
+          smoothedPos = cameraBasePosition.clone();
+          cameraSmoothedPositionRef.current = smoothedPos;
         }
-        summitParticles.geometry.attributes.position.needsUpdate = true;
-        mat.opacity = Math.max(0, (aliveCount / lifes.length) * 0.9);
+        smoothedPos.lerp(cameraBasePosition, camT);
+        camera.position.copy(smoothedPos);
+
+        let smoothedLookAt = cameraSmoothedLookAtRef.current;
+        if (!smoothedLookAt) {
+          smoothedLookAt = targetLookAt.clone();
+          cameraSmoothedLookAtRef.current = smoothedLookAt;
+        }
+        smoothedLookAt.lerp(targetLookAt, camT);
+        camera.lookAt(smoothedLookAt);
+
+        if (cameraLight) {
+          cameraLight.position.copy(camera.position);
+          cameraLight.target.position.copy(smoothedLookAt);
+          cameraLight.target.updateMatrixWorld();
+        }
       }
 
-      // Camera shake
+      // Camera shake applied as an offset on top of the smoothed position.
       if (cameraShake.active) {
         const age = time - cameraShake.startTime;
         if (age < cameraShake.duration) {
           const decay = 1 - age / cameraShake.duration;
-          camera.position.x =
-            cameraBasePosition.x + (Math.random() - 0.5) * 0.05 * decay;
-          camera.position.y =
-            cameraBasePosition.y + (Math.random() - 0.5) * 0.05 * decay;
-          camera.position.z =
-            cameraBasePosition.z + (Math.random() - 0.5) * 0.05 * decay;
+          camera.position.x += (Math.random() - 0.5) * 0.05 * decay;
+          camera.position.y += (Math.random() - 0.5) * 0.05 * decay;
+          camera.position.z += (Math.random() - 0.5) * 0.05 * decay;
         } else {
           cameraShake.active = false;
-          camera.position.copy(cameraBasePosition);
         }
       }
 
@@ -2785,12 +2429,19 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
 
     // Track pointer for marker hover interactions
     const onPointerMove = (e: PointerEvent) => {
-      const rect = canvasEl.getBoundingClientRect();
-      pointerRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      pointerRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      markerRaycaster?.updatePointer(
+        e.clientX,
+        e.clientY,
+        window.innerWidth,
+        window.innerHeight
+      );
+      canvasEl.style.cursor = markerRaycaster?.getHoveredMarker()
+        ? "pointer"
+        : "default";
     };
     const onPointerLeave = () => {
-      pointerRef.current.set(-999, -999);
+      markerRaycaster?.updatePointer(-999, -999, window.innerWidth, window.innerHeight);
+      canvasEl.style.cursor = "default";
     };
     canvasEl.addEventListener("pointermove", onPointerMove);
     canvasEl.addEventListener("pointerleave", onPointerLeave);
@@ -2808,6 +2459,14 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       canvasEl.removeEventListener("pointerleave", onPointerLeave);
       if (st) st.kill();
       renderer.dispose();
+      lights.dispose();
+      particles.dispose();
+      burstPool.dispose();
+      trail?.dispose();
+      markerRaycaster?.dispose();
+      if (scene.background) {
+        (scene.background as THREE.CanvasTexture).dispose();
+      }
       bgRing.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           child.geometry.dispose();
@@ -2818,7 +2477,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         baseTerrain.geometry.dispose();
         (baseTerrain.material as THREE.Material).dispose();
       }
-      aurora.children.forEach((c) => {
+      if (aurora) aurora.children.forEach((c) => {
         if (c instanceof THREE.Mesh) {
           c.geometry.dispose();
           c.material.map?.dispose();
@@ -2843,20 +2502,6 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         });
         markerGroupRef.current = null;
       }
-      if (markerLight) {
-        scene.remove(markerLight);
-        markerLight.dispose();
-      }
-
-      if (moonLight) {
-        scene.remove(moonLight.target);
-        scene.remove(moonLight);
-        moonLight.dispose();
-      }
-      if (orbGlow) {
-        scene.remove(orbGlow);
-        orbGlow.dispose();
-      }
       markersRef.current = [];
       if (climberRef.current) {
         scene.remove(climberRef.current);
@@ -2864,23 +2509,11 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         climberRef.current.material.dispose();
         climberRef.current = null;
       }
-      if (climberTrailRef.current) {
-        scene.remove(climberTrailRef.current);
-        climberTrailRef.current.geometry.dispose();
-        (climberTrailRef.current.material as THREE.Material).dispose();
-        climberTrailRef.current = null;
-      }
       if (flagRef.current) {
         scene.remove(flagRef.current);
         flagRef.current.material.map?.dispose();
         flagRef.current.material.dispose();
         flagRef.current = null;
-      }
-      if (summitParticlesRef.current) {
-        scene.remove(summitParticlesRef.current);
-        summitParticlesRef.current.geometry.dispose();
-        (summitParticlesRef.current.material as THREE.Material).dispose();
-        summitParticlesRef.current = null;
       }
       effects.forEach((e) => e.dispose());
       effects.length = 0;
@@ -2909,6 +2542,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           c.material.dispose();
         }
       });
+      atmoGlow.material.map?.dispose();
+      atmoGlow.material.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
@@ -2950,10 +2585,11 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     });
 
     // Particle burst
-    const burst = createSummitParticles(80);
-    burst.position.copy(summitPos);
-    scene.add(burst);
-    summitParticlesRef.current = burst;
+    burstPoolRef.current?.burst({
+      position: summitPos,
+      color: 0x4ecdc4,
+      count: 80,
+    });
   }, [summitReached]);
 
   return (
