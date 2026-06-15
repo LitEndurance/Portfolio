@@ -89,15 +89,6 @@ export default function Footer() {
                 LOCATION
               </p>
               <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "14px",
-                  color: "#e8ecf1",
-                }}
-              >
-                Spokane Valley, WA
-              </p>
-              <p
                 className="mt-2"
                 style={{
                   fontFamily: "var(--font-mono)",

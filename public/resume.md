@@ -1,7 +1,6 @@
 # William Barnhart
 
 **Systems Administrator & Infrastructure Engineer**  
-Spokane Valley, WA  
 willbarnh@gmail.com
 
 ---

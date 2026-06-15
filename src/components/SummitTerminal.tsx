@@ -334,7 +334,6 @@ const COMMANDS: Record<string, (args: string[]) => TerminalLine[]> = {
     { type: "output", text: "" },
     { type: "output", text: "Name:     William Barnhart" },
     { type: "output", text: "Title:    Systems Administrator & Infrastructure Engineer" },
-    { type: "output", text: "Location: Spokane Valley, WA" },
     { type: "output", text: "Uptime:   99%+ across all client infrastructure" },
     { type: "output", text: "" },
     { type: "output", text: "Specializes in: Linux, Docker, Next.js, NestJS, Networking, AI Dev" },
