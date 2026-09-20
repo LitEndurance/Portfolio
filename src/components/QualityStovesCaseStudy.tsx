@@ -354,9 +354,14 @@ export default function QualityStovesCaseStudy() {
         >
           Replaced a stove and spa retailer&apos;s aging Showit site with a custom
           Next.js build — statically prerendered, edge-cached on Cloudflare, with
-          product manuals moved to R2 object storage and lead forms flowing
-          straight into NetSuite. Launched August 12, 2026; every number below is
-          measured after launch.
+          product manuals moved to R2 object storage and lead forms piped through
+          n8n into NetSuite. n8n sits in front of the NetSuite API as an
+          aggregator: it validates, normalizes, and reshapes every submission
+          before it hits the ERP, so data manipulation lives in workflows instead
+          of site code. Failed writes retry instead of dropping leads, API
+          credentials stay server-side, and new integrations bolt on without a
+          redeploy. Launched August 12, 2026; every number below is measured
+          after launch.
         </p>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

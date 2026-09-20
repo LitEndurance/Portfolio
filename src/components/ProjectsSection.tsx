@@ -10,8 +10,8 @@ const projects = [
     number: "01",
     title: "QUALITYSTOVESANDSPAS.COM",
     description:
-      "Full website rebuild replacing the retailer's Showit site: custom Next.js, statically prerendered and edge-cached on Cloudflare, manuals on R2, lead forms into NetSuite. Server response down 39% (391→237ms), Lighthouse 93/96/96/100, leads up 244% (9→31 in 5 weeks), core-market traffic up 49% YoY.",
-    tags: ["Next.js", "Cloudflare", "R2", "NetSuite", "GA4", "Lighthouse"],
+      "Full website rebuild replacing the retailer's Showit site: custom Next.js, statically prerendered and edge-cached on Cloudflare, manuals on R2, lead forms through an n8n workflow layer aggregating the NetSuite API (validation, reshaping, retries). Server response down 39% (391→237ms), Lighthouse 93/96/96/100, leads up 244% (9→31 in 5 weeks), core-market traffic up 49% YoY.",
+    tags: ["Next.js", "Cloudflare", "R2", "n8n", "NetSuite", "GA4", "Lighthouse"],
     status: "LIVE",
   },
   {
