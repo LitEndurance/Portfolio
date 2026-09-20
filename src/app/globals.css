@@ -80,6 +80,15 @@ body.no-scroll { overflow: hidden; }
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
 }
 
+/* Low-tier devices (incl. CPU-only/software WebGL): swap the expensive
+   backdrop blur for an opaque panel. backdrop-filter forces a full-screen
+   readback + blur every frame, which is brutal without a GPU. */
+body.low-tier .section-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(6, 10, 20, 0.94);
+}
+
 /* Level badge styling */
 .level-badge {
   display: inline-flex;

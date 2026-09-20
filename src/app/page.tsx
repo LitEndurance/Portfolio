@@ -85,6 +85,13 @@ function BootLockedContent({
   const isBooting = bootStage !== "ready";
   const autoSkipBoot = tier === "low" || reducedMotion;
 
+  // Flag low-tier devices so CSS can swap out GPU-expensive effects
+  // (e.g. backdrop-filter blur) for cheap solid alternatives.
+  useEffect(() => {
+    document.body.classList.toggle("low-tier", tier === "low");
+    return () => document.body.classList.remove("low-tier");
+  }, [tier]);
+
   // Start the ambient audio fade-in once the boot overlay has fully finished.
   // The audio graph is already initialized, so this just resumes the context
   // (if the browser allows) and ramps the master/wind gains up smoothly.

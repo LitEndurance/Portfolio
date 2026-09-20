@@ -11,6 +11,7 @@ import * as THREE from "three";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { soundEngine } from "@/lib/soundEngine";
+import { throttleRaf } from "@/lib/throttleRaf";
 import { useClimb, type Zone } from "@/components/ClimbContext";
 import { ZONES, progressToZone, zoneTrailT } from "@/components/zoneConfig";
 import type { DeviceTier } from "@/hooks/useDeviceTier";
@@ -274,12 +275,16 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-async function loadMountainBinary(): Promise<MountainData> {
+async function loadMountainBinary(lowPoly: boolean): Promise<MountainData> {
+  // Low tier loads the decimated LOD mesh (95k tris vs 1.2M) — the single
+  // biggest frame-time win on CPU rasterizers, and it boots ~10× faster.
+  const name = lowPoly ? "mountain-low" : "mountain";
+
   // Try compressed version first
   let data: ArrayBuffer;
   try {
     const response = await withTimeout(
-      fetch("/mountain.bin.gz"),
+      fetch(`/${name}.bin.gz`),
       15000,
       "Mountain binary fetch"
     );
@@ -292,7 +297,7 @@ async function loadMountainBinary(): Promise<MountainData> {
     }
   } catch {
     // Fallback to uncompressed binary
-    const response = await fetch("/mountain.bin");
+    const response = await fetch(`/${name}.bin`);
     if (!response.ok) throw new Error("Failed to fetch mountain binary");
     data = await response.arrayBuffer();
   }
@@ -406,13 +411,22 @@ function createBackgroundMountainRing(
   const segmentCount = isLowQuality ? 5 : isMediumQuality ? 6 : 8;
   const radius = 60;
 
-  const bgMat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.95,
-    metalness: 0,
-    flatShading: true,
-    side: THREE.DoubleSide,
-  });
+  // Low tier uses Lambert instead of Standard PBR: the scene stays fully
+  // light-reactive (moon, rim, shadows) but the per-fragment BRDF cost —
+  // the dominant expense on a CPU rasterizer — drops dramatically.
+  const bgMat = isLowQuality
+    ? new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      })
+    : new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.95,
+        metalness: 0,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      });
 
   for (let i = 0; i < segmentCount; i++) {
     const angle = (i / segmentCount) * Math.PI * 2;
@@ -423,6 +437,11 @@ function createBackgroundMountainRing(
     mesh.position.set(Math.sin(angle) * radius, -3, Math.cos(angle) * radius);
     mesh.rotation.x = -Math.PI / 2;
     mesh.rotation.z = -angle + Math.PI;
+
+    // Static silhouettes: bake the transform once and skip the per-frame
+    // matrix recomposition in the render loop.
+    mesh.updateMatrix();
+    mesh.matrixAutoUpdate = false;
 
     group.add(mesh);
   }
@@ -537,6 +556,8 @@ function createCloudTexture(): THREE.CanvasTexture {
 function createClouds(count: number): THREE.Group {
   const group = new THREE.Group();
   const texture = createCloudTexture();
+  // Stashed so cleanup can dispose the shared texture exactly once.
+  group.userData.texture = texture;
 
   const cloudData = [
     { x: -28, y: 12, z: -18, scale: 22, speed: 0.5, parallax: 0.25 },
@@ -595,21 +616,25 @@ function createMountainMist(count: number): THREE.Group {
     { x: -18, z: -9, scale: 20 },
   ];
 
+  // One shared gradient texture for every mist sprite instead of an identical
+  // 256×256 canvas per sprite.
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+
+  const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, "rgba(220, 160, 200, 0.12)");
+  grad.addColorStop(0.35, "rgba(160, 120, 180, 0.06)");
+  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 256);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  group.userData.texture = texture;
+
   for (const data of mistData.slice(0, count)) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext("2d")!;
-
-    const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-    grad.addColorStop(0, "rgba(220, 160, 200, 0.12)");
-    grad.addColorStop(0.35, "rgba(160, 120, 180, 0.06)");
-    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 256, 256);
-
-    const texture = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
@@ -742,13 +767,18 @@ function createBaseTerrain(
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
 
-  const material = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.92,
-    metalness: 0.02,
-    flatShading: false,
-    side: THREE.FrontSide,
-  });
+  const material = isLowQuality
+    ? new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        side: THREE.FrontSide,
+      })
+    : new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.92,
+        metalness: 0.02,
+        flatShading: false,
+        side: THREE.FrontSide,
+      });
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.rotation.x = -Math.PI / 2;
@@ -1172,6 +1202,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       profile.tier === "medium"
     );
     baseTerrain.receiveShadow = profile.shadows;
+    baseTerrain.updateMatrix();
+    baseTerrain.matrixAutoUpdate = false;
     scene.add(baseTerrain);
 
     const aurora = profile.enableAurora ? createAurora() : null;
@@ -1200,6 +1232,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     scene.add(mountainMist);
 
     const atmoGlow = createAtmosphericGlow();
+    atmoGlow.updateMatrix();
+    atmoGlow.matrixAutoUpdate = false;
     scene.add(atmoGlow);
 
     let st: ScrollTrigger | null = null;
@@ -1454,7 +1488,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     }
 
     // ─── Load Pre-Processed Mountain Binary ────────────
-    loadMountainBinary()
+    loadMountainBinary(profile.lowPolyMountain)
       .then((mountainData) => {
         if (isCleanedUp) {
           mountainData.geometry.dispose();
@@ -1478,18 +1512,31 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           p.y += sinkY;
         });
 
-        // Create mesh
-        const mtnMat = new THREE.MeshStandardMaterial({
-          vertexColors: true,
-          roughness: 0.58,
-          metalness: 0.04,
-          flatShading: false,
-          side: THREE.DoubleSide,
-        });
+        // Create mesh. Low tier swaps Standard PBR for Lambert: still fully
+        // lit (moon key light, rim, camera fill, shadows), but without the
+        // per-fragment specular BRDF that CPU rasterizers struggle with.
+        const mtnMat = profile.cheapLighting
+          ? new THREE.MeshLambertMaterial({
+              vertexColors: true,
+              side: THREE.DoubleSide,
+            })
+          : new THREE.MeshStandardMaterial({
+              vertexColors: true,
+              roughness: 0.58,
+              metalness: 0.04,
+              flatShading: false,
+              side: THREE.DoubleSide,
+            });
         mountainMesh = new THREE.Mesh(geometry, mtnMat);
-        mountainMesh.castShadow = true;
-        mountainMesh.receiveShadow = true;
+        mountainMesh.castShadow = profile.shadows;
+        mountainMesh.receiveShadow = profile.shadows;
+        mountainMesh.updateMatrix();
+        mountainMesh.matrixAutoUpdate = false;
         scene.add(mountainMesh);
+
+        // The shadow casters are static; re-render the (autoUpdate-disabled)
+        // shadow map once now that the mountain geometry exists.
+        if (profile.shadows) renderer.shadowMap.needsUpdate = true;
 
         const { highestX, highestY, highestZ } = mountainData;
         const summitY = highestY + sinkY;
@@ -1594,6 +1641,16 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           { progress: 1.0, trailT: 1.0, angle: Math.PI / 2, radius: 22, camY: 6 },
         ];
 
+        // Precomputed column arrays so the per-scroll interpolation below
+        // doesn't allocate four throwaway arrays on every scroll tick.
+        const landmarkAngles = landmarks.map((lm) => lm.angle);
+        const landmarkRadii = landmarks.map((lm) => lm.radius);
+        const landmarkCamYs = landmarks.map((lm) => lm.camY);
+        const landmarkTrailTs = landmarks.map((lm) => lm.trailT);
+        const mountainCenterVec = new THREE.Vector3(centerX, centerY, centerZ);
+        const posePos = new THREE.Vector3();
+        const poseLookAt = new THREE.Vector3();
+
         function interpolateValue(values: number[], progress: number): number {
           const n = landmarks.length;
           let i0 = 0;
@@ -1630,49 +1687,41 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
 
         function getCameraPose(progress: number): { pos: THREE.Vector3; lookAt: THREE.Vector3 } {
           // Orbit the camera around the mountain as the user climbs, keeping
-          // the moonlight and ridge trail in view at each landmark.
-          const angle = interpolateValue(
-            landmarks.map((lm) => lm.angle),
-            progress
-          );
-          const radius = interpolateEase(
-            landmarks.map((lm) => lm.radius),
-            progress
-          );
-          const camYOffset = interpolateEase(
-            landmarks.map((lm) => lm.camY),
-            progress
-          );
-          const trailT = interpolateValue(
-            landmarks.map((lm) => lm.trailT),
-            progress
-          );
+          // the moonlight and ridge trail in view at each landmark. Writes
+          // into the preallocated pose vectors — no per-call allocation.
+          const angle = interpolateValue(landmarkAngles, progress);
+          const radius = interpolateEase(landmarkRadii, progress);
+          const camYOffset = interpolateEase(landmarkCamYs, progress);
+          const trailT = interpolateValue(landmarkTrailTs, progress);
 
           // Look at the current trail point so the camera tracks the ridge line
           // and passes each marker as it climbs.
-          const target = pathCurve!.getPoint(Math.max(0, Math.min(1, trailT)));
+          const target = pathCurve!.getPoint(Math.max(0, Math.min(1, trailT)), poseLookAt);
           target.y += 0.5;
 
           // At the very end, ease the gaze from the summit trail to the mountain
           // center so the final shot frames the entire mountain.
-          const mountainCenter = new THREE.Vector3(centerX, centerY, centerZ);
           const pullBackStart = landmarks[landmarks.length - 2].progress;
           const pullBack = THREE.MathUtils.smoothstep(progress, pullBackStart, 1.0);
-          target.lerp(mountainCenter, pullBack);
+          target.lerp(mountainCenterVec, pullBack);
 
-          const pos = new THREE.Vector3(
+          posePos.set(
             centerX + Math.cos(angle) * radius,
             target.y + camYOffset,
             centerZ + Math.sin(angle) * radius
           );
 
-          return { pos, lookAt: target };
+          return { pos: posePos, lookAt: poseLookAt };
         }
 
         updateCamera = (progress: number) => {
           const pose = getCameraPose(progress);
           cameraBasePosition.copy(pose.pos);
-          cameraTargetLookAtRef.current = pose.lookAt;
+          if (!cameraTargetLookAtRef.current) {
+            cameraTargetLookAtRef.current = new THREE.Vector3();
+          }
+          // Copy, don't alias: the pose vectors are reused on the next tick.
+          cameraTargetLookAtRef.current.copy(pose.lookAt);
 
           // The actual camera position/lookAt are smoothed in the animation
           // loop so tiny scroll settling jitters don't translate directly to
@@ -1694,10 +1743,15 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           ZONES[5].progressStart, // Summit
         ];
 
+        // Reused target for getOrbPosition so the per-frame call in the
+        // animation loop doesn't allocate a new Vector3 every frame. Callers
+        // must copy the result if they need to retain it.
+        const orbTargetTmp = new THREE.Vector3();
+
         function getOrbPosition(progress: number): THREE.Vector3 {
           const curve = orbCurveRef.current;
           if (!curve || curve.points.length === 0) {
-            return pathCurve!.getPoint(0).clone();
+            return pathCurve!.getPoint(0, orbTargetTmp);
           }
 
           // Find the segment the current progress falls into.
@@ -1732,7 +1786,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           const t0 = idx / segmentCount;
           const t1 = Math.min(idx + 1, segmentCount) / segmentCount;
           const t = t0 + (t1 - t0) * easedT;
-          return curve.getPoint(Math.max(0, Math.min(1, t)));
+          return curve.getPoint(Math.max(0, Math.min(1, t)), orbTargetTmp);
         }
         getOrbPositionRef.current = getOrbPosition;
 
@@ -1744,6 +1798,16 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         const markerGroup = new THREE.Group();
         markerGroupRef.current = markerGroup;
         scene.add(markerGroup);
+
+        // Resources shared by every marker — created once, disposed once via
+        // the group userData in cleanup. Only the materials stay per-marker
+        // because their opacity/color are animated individually.
+        const sharedRingGeometry = new THREE.TorusGeometry(0.35, 0.04, 8, 32);
+        const sharedPortalTexture = createPortalRingTexture("#4ecdc4");
+        const sharedHoverRingTexture = createPokestopRingTexture();
+        markerGroup.userData.ringGeometry = sharedRingGeometry;
+        markerGroup.userData.portalTexture = sharedPortalTexture;
+        markerGroup.userData.hoverRingTexture = sharedHoverRingTexture;
 
         MARKERS.forEach((m) => {
           const basePosition = pathCurve!.getPoint(Math.max(0, Math.min(1, m.t)));
@@ -1758,7 +1822,6 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           }
 
           // Pulsing ring base
-          const ringGeo = new THREE.TorusGeometry(0.35, 0.04, 8, 32);
           const ringMat = new THREE.MeshBasicMaterial({
             color: 0x4ecdc4,
             transparent: true,
@@ -1766,16 +1829,15 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
             blending: THREE.AdditiveBlending,
             depthWrite: false,
           });
-          const ring = new THREE.Mesh(ringGeo, ringMat);
+          const ring = new THREE.Mesh(sharedRingGeometry, ringMat);
           ring.rotation.x = -Math.PI / 2;
           ring.position.copy(basePosition);
           ring.position.y -= 0.78;
           markerGroup.add(ring);
 
           // Glowing portal ring sprite
-          const portalTexture = createPortalRingTexture("#4ecdc4");
           const portalMat = new THREE.SpriteMaterial({
-            map: portalTexture,
+            map: sharedPortalTexture,
             transparent: true,
             opacity: 0.65,
             depthWrite: false,
@@ -1801,9 +1863,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           markerGroup.add(sprite);
 
           // Pokestop-style outer ring — hidden by default, spins on hover
-          const hoverRingTexture = createPokestopRingTexture();
           const hoverRingMat = new THREE.SpriteMaterial({
-            map: hoverRingTexture,
+            map: sharedHoverRingTexture,
             transparent: true,
             opacity: 0,
             depthWrite: false,
@@ -1828,8 +1889,12 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           });
         });
 
-        // Raycaster for marker hover interactions
-        markerRaycaster = new MarkerRaycaster(camera, markersRef.current);
+        // Raycaster for marker hover interactions. Skipped entirely on the
+        // low quality profile — hover effects are disabled there, so this
+        // saves a per-pointermove raycast against every marker sprite.
+        markerRaycaster = profile.enableMarkerHoverEffects
+          ? new MarkerRaycaster(camera, markersRef.current)
+          : null;
 
         // Surface-pushing helper for the construction phase (uses the same
         // bounding-ellipse logic as the animation loop).
@@ -1937,6 +2002,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           end: "bottom bottom",
           scrub: true,
           onUpdate: (self) => {
+            markActivity();
             scrollProgressRef.current = self.progress;
             if (updateCamera) updateCamera(self.progress);
             const zone = progressToZone(self.progress);
@@ -2031,6 +2097,12 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         lastZoneRef.current = initialZone;
         setZone(initialZone, Math.round(initialProgress * 8000));
 
+        // Precompile every shader program up front so the first scroll or
+        // reaction never hits a mid-session compile hitch.
+        renderer.compile(scene, camera);
+
+        sceneReady = true;
+        markActivity();
         setBootStage("ready");
       })
       .catch((err) => {
@@ -2041,8 +2113,31 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     // ─── Animation Loop ────────────────────────────────
     const clock = new THREE.Clock();
 
+    // ── Frame budget, adaptive resolution, demand rendering ──
+    // fpsCap: low tier renders at 30fps so a CPU rasterizer keeps up.
+    // Adaptive DPR: if rendered frames consistently miss the budget, the
+    // render resolution steps down (and back up when there's headroom).
+    // Demand rendering: with reduced motion there is no ambient animation to
+    // present, so frames are only drawn in response to activity.
+    const minFrameMs = profile.fpsCap > 0 ? 1000 / profile.fpsCap : 0;
+    let lastRenderMs = 0;
+    const basePixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      profile.pixelRatioCap
+    );
+    let pixelRatioScale = 1;
+    let frameTimeEma = 16;
+    let lastQualityCheckMs = 0;
+    let sceneReady = false;
+    let lastActivityMs = 0;
+    let lastCursor = "default";
+    const markActivity = () => {
+      lastActivityMs = performance.now();
+    };
+
     // Wire imperative reaction handler now that clock exists
     reactionHandlerRef.current = (type, payload) => {
+      markActivity();
       if (prefersReducedMotion) {
         if (type === "uptime") {
           soundEngine.success();
@@ -2136,10 +2231,31 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       // we resume immediately on visibility, but we avoid GPU work.
       if (!isVisibleRef.current) return;
 
+      const nowMs = performance.now();
+
+      // Frame-rate cap (low tier): present at most fpsCap frames per second.
+      if (minFrameMs > 0 && nowMs - lastRenderMs < minFrameMs - 1) return;
+
       // Compute delta before elapsed time so getDelta() returns the true
-      // frame interval rather than the tiny gap between the two calls.
+      // frame interval rather than the tiny gap between the two calls. This
+      // runs even on skipped frames so a resumed frame never sees a huge dt.
       const dt = clock.getDelta();
       const time = clock.getElapsedTime();
+
+      // Demand rendering: with reduced motion there is no ambient animation,
+      // so once the scene has settled and nothing has happened for a moment,
+      // skip straight to the next RAF without touching the renderer.
+      if (
+        prefersReducedMotion &&
+        sceneReady &&
+        effects.length === 0 &&
+        !lightFlare.active &&
+        !auroraOverride.active &&
+        !cameraShake.active &&
+        nowMs - lastActivityMs > 1200
+      ) {
+        return;
+      }
 
       // Update transient reaction effects
       for (let i = effects.length - 1; i >= 0; i--) {
@@ -2244,7 +2360,11 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
 
       // Marker hover state is maintained by the off-loop raycaster.
       const hoveredMarker = markerRaycaster?.getHoveredMarker() ?? null;
-      renderer.domElement.style.cursor = hoveredMarker ? "pointer" : "default";
+      const nextCursor = hoveredMarker ? "pointer" : "default";
+      if (nextCursor !== lastCursor) {
+        lastCursor = nextCursor;
+        canvasEl.style.cursor = nextCursor;
+      }
 
       markersRef.current.forEach((m, i) => {
         const isActive = m.zone === activeZone;
@@ -2410,6 +2530,32 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       }
 
       renderer.render(scene, camera);
+
+      // Adaptive resolution. renderer.render() only *queues* GL work, so its
+      // call duration says nothing about real frame cost — the honest signal
+      // is the time between presented frames (RAF-to-RAF delta). When that
+      // consistently exceeds the frame budget, step the pixel ratio down;
+      // step back up when there's headroom. Hysteresis + a slow check
+      // interval keep the resolution from oscillating.
+      const frameDeltaMs = nowMs - lastRenderMs;
+      frameTimeEma = frameTimeEma * 0.9 + frameDeltaMs * 0.1;
+      lastRenderMs = nowMs;
+      if (nowMs - lastQualityCheckMs > 1500) {
+        lastQualityCheckMs = nowMs;
+        // Telemetry for profiling (read via canvas dataset; no UI cost).
+        canvasEl.dataset.renderMs = frameTimeEma.toFixed(1);
+        canvasEl.dataset.pixelScale = pixelRatioScale.toFixed(2);
+        const frameBudgetMs = Math.max(minFrameMs, 1000 / 60);
+        if (frameTimeEma > frameBudgetMs * 1.35 && pixelRatioScale > 0.5) {
+          pixelRatioScale = Math.max(0.5, pixelRatioScale - 0.25);
+          renderer.setPixelRatio(basePixelRatio * pixelRatioScale);
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        } else if (frameTimeEma < frameBudgetMs * 0.75 && pixelRatioScale < 1) {
+          pixelRatioScale = Math.min(1, pixelRatioScale + 0.25);
+          renderer.setPixelRatio(basePixelRatio * pixelRatioScale);
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+      }
     };
 
     animate();
@@ -2418,6 +2564,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      // Demand-rendered scenes still need a fresh frame after a resize.
+      markActivity();
     };
     window.addEventListener("resize", onResize);
 
@@ -2427,24 +2575,31 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    // Track pointer for marker hover interactions
-    const onPointerMove = (e: PointerEvent) => {
+    // Track pointer for marker hover interactions. Raycasts are throttled to
+    // one per animation frame and the listeners are only attached when the
+    // quality profile enables hover effects (skipped on low tier).
+    const updateHover = throttleRaf((clientX: number, clientY: number) => {
+      markActivity();
       markerRaycaster?.updatePointer(
-        e.clientX,
-        e.clientY,
+        clientX,
+        clientY,
         window.innerWidth,
         window.innerHeight
       );
-      canvasEl.style.cursor = markerRaycaster?.getHoveredMarker()
-        ? "pointer"
-        : "default";
+    });
+    const onPointerMove = (e: PointerEvent) => {
+      updateHover(e.clientX, e.clientY);
     };
     const onPointerLeave = () => {
+      updateHover.cancel();
       markerRaycaster?.updatePointer(-999, -999, window.innerWidth, window.innerHeight);
+      lastCursor = "default";
       canvasEl.style.cursor = "default";
     };
-    canvasEl.addEventListener("pointermove", onPointerMove);
-    canvasEl.addEventListener("pointerleave", onPointerLeave);
+    if (profile.enableMarkerHoverEffects) {
+      canvasEl.addEventListener("pointermove", onPointerMove);
+      canvasEl.addEventListener("pointerleave", onPointerLeave);
+    }
     canvasEl.style.cursor = "default";
 
     return () => {
@@ -2453,6 +2608,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         clearTimeout(checkpointTimerRef.current);
       }
       cancelAnimationFrame(frameRef.current);
+      updateHover.cancel();
       window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       canvasEl.removeEventListener("pointermove", onPointerMove);
@@ -2490,14 +2646,22 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       }
       if (markerGroupRef.current) {
         scene.remove(markerGroupRef.current);
+        // Shared marker resources live on the group userData — dispose them
+        // exactly once. Only per-marker materials (and the unique label
+        // textures) are disposed per marker.
+        const shared = markerGroupRef.current.userData as {
+          ringGeometry?: THREE.BufferGeometry;
+          portalTexture?: THREE.Texture;
+          hoverRingTexture?: THREE.Texture;
+        };
+        shared.ringGeometry?.dispose();
+        shared.portalTexture?.dispose();
+        shared.hoverRingTexture?.dispose();
         markersRef.current.forEach((m) => {
-          m.ring.geometry.dispose();
           (m.ring.material as THREE.Material).dispose();
-          m.portal!.material.map?.dispose();
           (m.portal!.material as THREE.Material).dispose();
           m.sprite.material.map?.dispose();
           (m.sprite.material as THREE.Material).dispose();
-          m.hoverRing.material.map?.dispose();
           (m.hoverRing.material as THREE.Material).dispose();
         });
         markerGroupRef.current = null;
@@ -2530,15 +2694,15 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           (child.material as THREE.Material).dispose();
         }
       });
+      (clouds.userData.texture as THREE.Texture | undefined)?.dispose();
       clouds.children.forEach((c) => {
         if (c instanceof THREE.Sprite) {
-          c.material.map?.dispose();
           c.material.dispose();
         }
       });
+      (mountainMist.userData.texture as THREE.Texture | undefined)?.dispose();
       mountainMist.children.forEach((c) => {
         if (c instanceof THREE.Sprite) {
-          c.material.map?.dispose();
           c.material.dispose();
         }
       });
