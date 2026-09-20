@@ -10,6 +10,18 @@ import { useScrollLock } from "@/hooks/useScrollLock";
 
 const screenshots = [
   {
+    src: "/screenshots/qualitystoves-home.png",
+    caption: "Quality Stoves & Spas — Full Website Rebuild",
+    description:
+      "Custom Next.js build replacing the retailer's Showit site: statically prerendered, edge-cached on Cloudflare, with lead forms piped through an n8n workflow layer into NetSuite. Featured case study in the Summit Log above.",
+  },
+  {
+    src: "/screenshots/qualitystoves-products.png",
+    caption: "Quality Stoves & Spas — Product Catalog",
+    description:
+      "Product catalog pages on the rebuilt site — statically generated for instant loads, with product manuals served from R2 object storage.",
+  },
+  {
     src: "/screenshots/caeranthil-dashboard.png",
     caption: "Caeranthil — Event Management Platform",
     description:

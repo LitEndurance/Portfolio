@@ -89,5 +89,19 @@
     "png": "\\screenshots\\proxmox-datacenter.png",
     "webp": "\\screenshots\\proxmox-datacenter.webp",
     "avif": "\\screenshots\\proxmox-datacenter.avif"
+  },
+  "qualitystoves-home": {
+    "width": 1880,
+    "height": 940,
+    "png": "\\screenshots\\qualitystoves-home.png",
+    "webp": "\\screenshots\\qualitystoves-home.webp",
+    "avif": "\\screenshots\\qualitystoves-home.avif"
+  },
+  "qualitystoves-products": {
+    "width": 1880,
+    "height": 940,
+    "png": "\\screenshots\\qualitystoves-products.png",
+    "webp": "\\screenshots\\qualitystoves-products.webp",
+    "avif": "\\screenshots\\qualitystoves-products.avif"
   }
 }
