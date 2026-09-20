@@ -18,6 +18,16 @@ export interface QualityProfile {
   enableSummitParticles: boolean;
   enableWindEffects: boolean;
   enableMarkerHoverEffects: boolean;
+  /**
+   * Use cheap lit materials (Lambert instead of Standard PBR) — keeps the
+   * scene light-reactive (moon, shadows, traveling orb) at a fraction of the
+   * per-fragment cost. Critical for CPU/software rasterizers.
+   */
+  cheapLighting: boolean;
+  /** Max rendered frames per second; 0 = uncapped (display refresh). */
+  fpsCap: number;
+  /** Load the decimated LOD mountain mesh instead of the full 1.2M-tri one. */
+  lowPolyMountain: boolean;
 }
 
 export function getQualityProfile(
@@ -31,9 +41,14 @@ export function getQualityProfile(
     return {
       tier: "low",
       antialias: false,
-      pixelRatioCap: 1,
-      shadows: false,
-      toneMapping: THREE.NoToneMapping,
+      // On a CPU rasterizer every fragment counts; start slightly below 1:1
+      // and let the adaptive scaler find the floor from there.
+      pixelRatioCap: 0.75,
+      // Shadows stay on: the map is static and rendered exactly once, and
+      // they carry most of the scene's depth. 512px is plenty at this range.
+      shadows: true,
+      // Reinhard keeps the moody graded look for far less than ACES.
+      toneMapping: THREE.ReinhardToneMapping,
       shadowMapSize: 512,
       snowCount: 120,
       starCount: 150,
@@ -45,6 +60,9 @@ export function getQualityProfile(
       enableSummitParticles: false,
       enableWindEffects: false,
       enableMarkerHoverEffects: false,
+      cheapLighting: true,
+      fpsCap: 30,
+      lowPolyMountain: true,
     };
   }
 
@@ -66,6 +84,11 @@ export function getQualityProfile(
       enableSummitParticles: true,
       enableWindEffects: true,
       enableMarkerHoverEffects: true,
+      cheapLighting: false,
+      fpsCap: 0,
+      // The decimated mesh (95k tris, 0.02% error) is visually
+      // indistinguishable and ~12× cheaper on integrated GPUs.
+      lowPolyMountain: true,
     };
   }
 
@@ -86,5 +109,8 @@ export function getQualityProfile(
     enableSummitParticles: true,
     enableWindEffects: true,
     enableMarkerHoverEffects: true,
+    cheapLighting: false,
+    fpsCap: 0,
+    lowPolyMountain: false,
   };
 }

@@ -13,6 +13,9 @@ export function createRenderer(profile: QualityProfile): THREE.WebGLRenderer {
     stencil: false,
     depth: true,
     powerPreference,
+    // Medium precision halves shader register pressure on CPU rasterizers;
+    // scene coordinates stay well within its range.
+    precision: profile.cheapLighting ? "mediump" : "highp",
   });
 
   renderer.setPixelRatio(
@@ -25,6 +28,12 @@ export function createRenderer(profile: QualityProfile): THREE.WebGLRenderer {
   renderer.shadowMap.type = profile.shadows
     ? THREE.PCFSoftShadowMap
     : THREE.BasicShadowMap;
+
+  // The shadow-casting moon light and the mountain never move, so the shadow
+  // map only needs to be rendered once instead of every frame. Mountain3D
+  // flips needsUpdate again after the geometry finishes loading.
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
 
   return renderer;
 }

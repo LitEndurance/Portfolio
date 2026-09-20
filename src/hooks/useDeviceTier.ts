@@ -33,17 +33,48 @@ function getSaveData(): boolean {
   return nav.connection?.saveData ?? false;
 }
 
-function supportsWebGL(): boolean {
-  if (typeof window === "undefined") return true;
+interface WebGLInfo {
+  supported: boolean;
+  software: boolean;
+}
+
+function getWebGLInfo(): WebGLInfo {
+  if (typeof window === "undefined") return { supported: true, software: false };
   try {
+    if (!window.WebGLRenderingContext) return { supported: false, software: false };
     const canvas = document.createElement("canvas");
-    return !!(
-      window.WebGLRenderingContext &&
-      (canvas.getContext("webgl") || canvas.getContext("experimental-webgl"))
-    );
+    const gl = (canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
+    if (!gl) return { supported: false, software: false };
+
+    // Detect CPU rasterizers (SwiftShader, llvmpipe, etc). A machine without
+    // hardware acceleration reports one of these, and driving the full scene
+    // through them needs the low quality profile to stay smooth.
+    let software = false;
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    if (debugInfo) {
+      const rendererName = String(
+        gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) ?? ""
+      );
+      software =
+        /swiftshader|llvmpipe|softpipe|software|basic render/i.test(rendererName);
+    }
+
+    // Release the probe context so it doesn't count against the browser's
+    // WebGL context limit once the real renderer boots.
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return { supported: true, software };
   } catch {
-    return false;
+    return { supported: false, software: false };
   }
+}
+
+// The probe result is hardware-fixed, so cache it: re-probing would mean
+// creating (and losing) another WebGL context on every reduced-motion change.
+let cachedWebGLInfo: WebGLInfo | null = null;
+function getCachedWebGLInfo(): WebGLInfo {
+  if (!cachedWebGLInfo) cachedWebGLInfo = getWebGLInfo();
+  return cachedWebGLInfo;
 }
 
 function computeTier(
@@ -52,9 +83,11 @@ function computeTier(
   memoryGb: number | null,
   cores: number | null,
   connectionType: string | null,
-  webgl: boolean
+  webgl: boolean,
+  softwareRenderer: boolean
 ): DeviceTier {
   if (!webgl) return "low";
+  if (softwareRenderer) return "low";
   if (saveData) return "low";
   if (reducedMotion) return "low";
 
@@ -90,13 +123,13 @@ export function useDeviceTier(): DeviceCapabilities {
         ? navigator.hardwareConcurrency || null
         : null;
 
-    const webgl = supportsWebGL();
+    const webglInfo = getCachedWebGLInfo();
     const saveData = getSaveData();
     const connectionType = getConnectionType();
 
     return {
-      tier: computeTier(reducedMotion, saveData, memoryGb, cores, connectionType, webgl),
-      supportsWebGL: webgl,
+      tier: computeTier(reducedMotion, saveData, memoryGb, cores, connectionType, webglInfo.supported, webglInfo.software),
+      supportsWebGL: webglInfo.supported,
       reducedMotion,
       saveData,
       memoryGb,
@@ -119,7 +152,8 @@ export function useDeviceTier(): DeviceCapabilities {
           next.memoryGb,
           next.cores,
           next.connectionType,
-          next.supportsWebGL
+          next.supportsWebGL,
+          getCachedWebGLInfo().software
         );
         return next;
       });
