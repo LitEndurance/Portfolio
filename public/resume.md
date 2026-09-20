@@ -7,7 +7,7 @@ willbarnh@gmail.com
 
 ## Professional Summary
 
-Systems Administrator and Infrastructure Engineer managing multi-client hosting environments with **99%+ uptime** across LLCs and development teams. Specializes in Linux, Docker, Next.js, NestJS, networking, and AI-assisted development.
+Systems Administrator and Infrastructure Engineer managing multi-client hosting environments for LLCs and development teams, with a focus on reliability. Specializes in Linux, Docker, Next.js, NestJS, networking, and AI-assisted development.
 
 ---
 
@@ -49,7 +49,7 @@ Systems Administrator and Infrastructure Engineer managing multi-client hosting 
 ## Key Projects
 
 ### HEROESMC.NET INFRASTRUCTURE — ARCHIVED
-Scalable Minecraft hosting platform with automated backups, containerized server orchestration via Pterodactyl, and 99%+ uptime monitoring. Multi-node deployment with WireGuard VPN mesh and Cloudflare DDoS protection.
+Scalable Minecraft hosting platform with automated backups, containerized server orchestration via Pterodactyl, and automated uptime monitoring. Multi-node deployment with WireGuard VPN mesh and Cloudflare DDoS protection.
 *Pterodactyl · Docker · WireGuard · Cloudflare · Bash*
 
 ### BOREDOMHUB LLC — LIVE
@@ -60,7 +60,7 @@ Pterodactyl panel setup with snapshots and backups for BoredomHub LLC, including
 Pterodactyl panel setup with snapshots and backups for the Cozycord development team, delivering containerized game-server environments and reliable orchestration.
 *Pterodactyl · Linux · Docker · Snapshots · Backups*
 
-### PVE DISTRICT — LIVE
+### PVE DISTRICT — ARCHIVED
 Built on a Proxmox VM with Docker containers for secure, scalable application hosting and cross-platform authentication.
 *Proxmox · Docker · Caddy · OAuth · Roblox · Discord*
 

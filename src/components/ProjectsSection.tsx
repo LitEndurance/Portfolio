@@ -3,18 +3,27 @@
 import { useClimb } from "./ClimbContext";
 import FadeIn from "./FadeIn";
 import SectionShell from "./SectionShell";
+import QualityStovesCaseStudy from "./QualityStovesCaseStudy";
 
 const projects = [
   {
     number: "01",
+    title: "QUALITYSTOVESANDSPAS.COM",
+    description:
+      "Full website rebuild replacing the retailer's Showit site: custom Next.js, statically prerendered and edge-cached on Cloudflare, manuals on R2, lead forms into NetSuite. Server response down 39% (391→237ms), Lighthouse 93/96/96/100, leads up 244% (9→31 in 5 weeks), core-market traffic up 49% YoY.",
+    tags: ["Next.js", "Cloudflare", "R2", "NetSuite", "GA4", "Lighthouse"],
+    status: "LIVE",
+  },
+  {
+    number: "02",
     title: "HEROESMC.NET INFRASTRUCTURE",
     description:
-      "Scalable Minecraft hosting platform with automated backups, containerized server orchestration via Pterodactyl, and 99%+ uptime monitoring. Multi-node deployment with WireGuard VPN mesh and Cloudflare DDoS protection. (ARCHIVED)",
+      "Scalable Minecraft hosting platform with automated backups, containerized server orchestration via Pterodactyl, and automated uptime monitoring. Multi-node deployment with WireGuard VPN mesh and Cloudflare DDoS protection. (ARCHIVED)",
     tags: ["Pterodactyl", "Docker", "WireGuard", "Cloudflare", "Bash"],
     status: "ARCHIVED",
   },
   {
-    number: "02",
+    number: "03",
     title: "BOREDOMHUB LLC",
     description:
       "Pterodactyl panel setup with snapshots and backups for BoredomHub LLC, including Linux server administration and containerized game-server orchestration.",
@@ -22,7 +31,7 @@ const projects = [
     status: "LIVE",
   },
   {
-    number: "03",
+    number: "04",
     title: "COZYCORD SERVICES",
     description:
       "Pterodactyl panel setup with snapshots and backups for the Cozycord development team, delivering containerized game-server environments and reliable orchestration.",
@@ -30,12 +39,12 @@ const projects = [
     status: "PAST",
   },
   {
-    number: "04",
+    number: "05",
     title: "PVE DISTRICT",
     description:
-      "Built on a Proxmox VM with Docker containers for secure, scalable application hosting and cross-platform authentication.",
+      "Built on a Proxmox VM with Docker containers for secure, scalable application hosting and cross-platform authentication. (ARCHIVED)",
     tags: ["Proxmox", "Docker", "Caddy", "OAuth", "Roblox", "Discord"],
-    status: "LIVE",
+    status: "ARCHIVED",
   },
 ];
 
@@ -63,6 +72,7 @@ export default function ProjectsSection() {
       title="Key infrastructure deployments"
     >
       <div className="space-y-8">
+        <QualityStovesCaseStudy />
         {projects.map((p, idx) => (
           <FadeIn key={p.number} delay={0.1 * (idx + 1)}>
             <div

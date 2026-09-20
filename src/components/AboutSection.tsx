@@ -46,7 +46,7 @@ export default function AboutSection() {
             <p>
               Systems Administrator with proven experience managing multi-client hosting
               infrastructure. Operated hosting services for business clients including LLCs and
-              development teams with 99%+ uptime.
+              development teams, with a focus on reliability and consistent availability.
             </p>
             <p>
               Proficient in Linux and Windows environments with cross-platform OS deployment across
@@ -57,10 +57,10 @@ export default function AboutSection() {
             <p>
               Extensive experience with AI-assisted development workflows, leveraging LLMs and AI
               coding tools to accelerate development cycles and automate infrastructure tasks.
-              Currently providing managed hosting for BoredomHub LLC and PVE District, including
+              Currently providing managed hosting for BoredomHub LLC, including
               Pterodactyl panel setups with snapshots, backups, and Proxmox VM administration.
-              Previously supported the Cozycord development team with containerized game-server
-              orchestration.
+              Previously supported PVE District and the Cozycord development team with
+              containerized application hosting and game-server orchestration.
             </p>
           </div>
         </FadeIn>
