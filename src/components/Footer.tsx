@@ -1,6 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import FadeIn from "./FadeIn";
+
+const legalLinkStyle = {
+  fontFamily: "var(--font-mono)",
+  fontSize: "11px",
+  color: "rgba(78, 205, 196, 0.75)",
+  textDecoration: "none",
+} as const;
 
 export default function Footer() {
   return (
@@ -171,15 +179,33 @@ export default function Footer() {
 
         <FadeIn delay={0.5}>
           <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
-            <p
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                color: "rgba(78, 205, 196, 0.5)",
-              }}
-            >
-              &copy; {new Date().getFullYear()} William Barnhart. All rights reserved.
-            </p>
+            <div className="flex flex-wrap items-center" style={{ gap: "6px 18px" }}>
+              <p
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  color: "rgba(78, 205, 196, 0.5)",
+                }}
+              >
+                &copy; {new Date().getFullYear()} William Barnhart. All rights reserved.
+              </p>
+              <nav aria-label="Legal" className="flex items-center" style={{ gap: "16px" }}>
+                <Link
+                  href="/privacy"
+                  className="focus-ring inline-flex items-center min-h-[32px] transition-opacity duration-300 hover:opacity-70"
+                  style={legalLinkStyle}
+                >
+                  Privacy
+                </Link>
+                <Link
+                  href="/terms"
+                  className="focus-ring inline-flex items-center min-h-[32px] transition-opacity duration-300 hover:opacity-70"
+                  style={legalLinkStyle}
+                >
+                  Terms
+                </Link>
+              </nav>
+            </div>
             <a
               href="/websites"
               className="transition-opacity duration-300 hover:opacity-70"

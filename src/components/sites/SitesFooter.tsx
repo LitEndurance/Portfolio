@@ -64,6 +64,17 @@ export default function SitesFooter() {
             <ArrowUp size={13} aria-hidden="true" />
           </a>
         </nav>
+        <div className="sites-footer-legal">
+          <p>&copy; {new Date().getFullYear()} William Barnhart · Spokane Valley, WA</p>
+          <nav aria-label="Legal" className="sites-footer-legal-links">
+            <Link href="/privacy" className="focus-ring">
+              Privacy
+            </Link>
+            <Link href="/terms" className="focus-ring">
+              Terms
+            </Link>
+          </nav>
+        </div>
       </div>
     </footer>
   );

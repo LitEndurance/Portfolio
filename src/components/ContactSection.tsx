@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AlertTriangle, ArrowRight, Check, Loader2 } from "lucide-react";
 import FadeIn from "./FadeIn";
 import SectionShell from "./SectionShell";
@@ -156,6 +157,13 @@ export default function ContactSection() {
               </button>
               <p className="summit-note">Goes straight to my inbox.</p>
             </div>
+            <p className="summit-privacy-note">
+              By sending, you agree to the{" "}
+              <Link href="/privacy" className="summit-link focus-ring">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </form>
         )}
       </FadeIn>

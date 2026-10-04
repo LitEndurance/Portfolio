@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import SectionShell from "@/components/SectionShell";
 import FadeIn from "@/components/FadeIn";
@@ -178,6 +179,13 @@ export default function SitesContact() {
                   {contact.fields.submitNote}
                 </p>
               </div>
+              <p className="sm:col-span-2 sites-privacy-note" style={{ marginTop: "-6px" }}>
+                {contact.fields.privacyPrefix}{" "}
+                <Link href={contact.fields.privacyHref} className="sites-inline-link">
+                  {contact.fields.privacyLabel}
+                </Link>
+                .
+              </p>
             </form>
           )}
         </FadeIn>

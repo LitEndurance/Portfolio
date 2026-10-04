@@ -34,7 +34,9 @@ export default function TrailSelectPage() {
       className="flex flex-col items-center justify-center"
       style={{ minHeight: "100dvh", padding: "clamp(24px, 5vw, 64px) 5vw" }}
     >
-      <div style={{ maxWidth: "960px", width: "100%" }}>
+      {/* Auto margins keep the trail picker centered while the footer sits
+          at the bottom of the screen. */}
+      <div style={{ maxWidth: "960px", width: "100%", marginTop: "auto", marginBottom: "auto" }}>
         <p
           style={{
             fontFamily: "var(--font-mono)",
@@ -146,6 +148,35 @@ export default function TrailSelectPage() {
           ))}
         </div>
       </div>
+
+      <footer
+        className="flex flex-wrap items-center justify-center"
+        style={{
+          gap: "4px 18px",
+          paddingTop: "clamp(28px, 5vh, 48px)",
+          fontFamily: "var(--font-mono)",
+          fontSize: "11px",
+          color: "rgba(78, 205, 196, 0.5)",
+        }}
+      >
+        <p>&copy; {new Date().getFullYear()} William Barnhart · Spokane Valley, WA</p>
+        <nav aria-label="Legal" className="flex items-center" style={{ gap: "16px" }}>
+          <Link
+            href="/privacy"
+            className="focus-ring inline-flex items-center min-h-[32px] transition-opacity duration-300 hover:opacity-70"
+            style={{ color: "rgba(78, 205, 196, 0.8)", textDecoration: "none" }}
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/terms"
+            className="focus-ring inline-flex items-center min-h-[32px] transition-opacity duration-300 hover:opacity-70"
+            style={{ color: "rgba(78, 205, 196, 0.8)", textDecoration: "none" }}
+          >
+            Terms
+          </Link>
+        </nav>
+      </footer>
     </main>
   );
 }

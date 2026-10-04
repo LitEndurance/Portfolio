@@ -355,6 +355,9 @@ export const sites = {
       submit: "Send it",
       sending: "Sending…",
       submitNote: "Goes straight to my inbox. I'll reply by email.",
+      privacyPrefix: "By sending, you agree to the",
+      privacyLabel: "Privacy Policy",
+      privacyHref: "/privacy",
     },
     // Form endpoint: a Cloudflare Pages Function (functions/api/contact.ts).
     endpoint: "/api/contact",

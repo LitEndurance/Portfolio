@@ -684,6 +684,13 @@ body.low-tier .section-card {
   color: rgba(78, 205, 196, 0.7);
 }
 .summit-direct a { overflow-wrap: anywhere; }
+.summit-privacy-note {
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: rgba(208, 213, 221, 0.5);
+}
 @keyframes summitSpin { to { transform: rotate(360deg); } }
 .summit-spin { animation: summitSpin 0.9s linear infinite; }
 @media (max-width: 639px) {
