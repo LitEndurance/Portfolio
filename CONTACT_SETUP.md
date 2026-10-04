@@ -1,7 +1,13 @@
 # Contact form setup (Cloudflare Pages + Resend)
 
-The `/websites` contact form posts to `/api/contact`, a Cloudflare Pages
-Function in `functions/api/contact.ts`. The site itself is a static export
+Both contact forms, the `/websites` form and the summit form at the top of
+the `/infrastructure` climb, post to `/api/contact`, a Cloudflare Pages
+Function in `functions/api/contact.ts`. They share the client logic in
+`src/hooks/useContactForm.ts` and send a `source` field (`"websites"` or
+`"infrastructure"`; missing means `"websites"`). Business name is required
+only for websites inquiries, and the subject reads "New website inquiry from
+{name}" or "New infrastructure inquiry from {name}"; the body names the form
+it came from. The site itself is a static export
 (`output: "export"` in `next.config.ts`, published from `build/`), so the
 endpoint lives in Pages' `functions/` directory, not in the Next.js app.
 The function validates the fields, drops submissions that fill the hidden
@@ -64,12 +70,17 @@ cp .dev.vars.example .dev.vars       # then put your real RESEND_API_KEY in it
 npx wrangler pages dev build         # serves build/ + functions/ on :8788
 ```
 
-Open http://localhost:8788/websites, fill in the form and send. Or:
+Open http://localhost:8788/websites or http://localhost:8788/infrastructure
+(scroll to the summit), fill in the form and send. Or:
 
 ```bash
 curl -i -X POST http://localhost:8788/api/contact \
   -H "Content-Type: application/json" -H "Origin: http://localhost:8788" \
   -d '{"name":"Test","email":"you@example.com","business":"Test Co","message":"Hello"}'
+
+curl -i -X POST http://localhost:8788/api/contact \
+  -H "Content-Type: application/json" -H "Origin: http://localhost:8788" \
+  -d '{"source":"infrastructure","name":"Test","email":"you@example.com","message":"Hello"}'
 ```
 
 `{"ok":true}` means Resend accepted it. With a placeholder key you get a

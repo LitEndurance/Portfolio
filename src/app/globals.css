@@ -542,3 +542,155 @@ body.low-tier .section-card {
 .trail-card:hover {
   border-color: rgba(78, 205, 196, 0.32) !important;
 }
+
+/* Summit contact form on /infrastructure (ContactSection.tsx). Terminal look:
+   mono type, teal hairlines, 4px corners like the SummitOS chips. */
+.summit-label {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(78, 205, 196, 0.85);
+}
+.summit-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.55;
+  color: #e8ecf1;
+  background: rgba(8, 12, 20, 0.72);
+  border: 1px solid rgba(78, 205, 196, 0.22);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.summit-input::placeholder { color: rgba(208, 213, 221, 0.32); }
+.summit-input:hover { border-color: rgba(78, 205, 196, 0.36); }
+.summit-input:focus-visible,
+.summit-input:focus {
+  border-color: rgba(78, 205, 196, 0.7);
+  box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.14);
+}
+.summit-input[aria-invalid="true"] { border-color: rgba(232, 85, 85, 0.7); }
+.summit-field-error {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #ff8a8a;
+}
+.summit-hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.summit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 18px;
+}
+.summit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4ecdc4;
+  background: rgba(78, 205, 196, 0.12);
+  border: 1px solid rgba(78, 205, 196, 0.45);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+.summit-btn:hover:not(:disabled) {
+  background: rgba(78, 205, 196, 0.2);
+  border-color: rgba(78, 205, 196, 0.7);
+  box-shadow: 0 0 18px rgba(78, 205, 196, 0.12);
+}
+.summit-btn:disabled { opacity: 0.75; cursor: progress; }
+.summit-btn-ghost {
+  margin-top: 14px;
+  background: transparent;
+  border-color: rgba(78, 205, 196, 0.3);
+  font-size: 12px;
+}
+.summit-note {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: rgba(208, 213, 221, 0.5);
+}
+.summit-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 6px;
+  border: 1px solid;
+  outline: none;
+}
+.summit-status-ok {
+  border-color: rgba(78, 205, 196, 0.35);
+  background: rgba(78, 205, 196, 0.06);
+}
+.summit-status-ok .summit-status-icon { color: #4ecdc4; }
+.summit-status-error {
+  border-color: rgba(232, 85, 85, 0.45);
+  background: rgba(232, 85, 85, 0.07);
+}
+.summit-status-error .summit-status-icon { color: #ff8a8a; }
+.summit-status-icon { flex-shrink: 0; margin-top: 1px; }
+.summit-status-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #e8ecf1;
+}
+.summit-status-body {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: #d0d5dd;
+}
+.summit-link {
+  color: #4ecdc4;
+  text-decoration: underline;
+  text-decoration-color: rgba(78, 205, 196, 0.45);
+  text-underline-offset: 3px;
+}
+.summit-link:hover { text-decoration-color: #4ecdc4; }
+.summit-direct {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(78, 205, 196, 0.16);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(78, 205, 196, 0.7);
+}
+.summit-direct a { overflow-wrap: anywhere; }
+@keyframes summitSpin { to { transform: rotate(360deg); } }
+.summit-spin { animation: summitSpin 0.9s linear infinite; }
+@media (max-width: 639px) {
+  .summit-actions .summit-btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .summit-input,
+  .summit-btn { transition: none; }
+  .summit-spin { animation: none; }
+}

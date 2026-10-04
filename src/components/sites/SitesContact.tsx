@@ -1,111 +1,36 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import SectionShell from "@/components/SectionShell";
 import FadeIn from "@/components/FadeIn";
 import { sites } from "@/content/sites";
+import { useContactForm } from "@/hooks/useContactForm";
 
-type Status = "idle" | "sending" | "success" | "error";
-type FieldName = "name" | "email" | "business" | "website" | "message";
-type FieldErrors = Partial<Record<FieldName, string>>;
-
-const SEND_TIMEOUT_MS = 15000;
+const FIELDS = ["name", "email", "business", "website", "message"] as const;
+type FieldName = (typeof FIELDS)[number];
 
 export default function SitesContact() {
   const { contact } = sites;
-  const [values, setValues] = useState<Record<FieldName, string>>({
-    name: "",
-    email: "",
-    business: "",
-    website: "",
-    message: "",
+  const form = useContactForm({
+    source: "websites",
+    fields: FIELDS,
+    idPrefix: "sites",
+    email: contact.email,
+    endpoint: contact.endpoint,
+    genericError: contact.status.errorGeneric,
+    mailtoLabels: { name: "Name", email: "Email", business: "Business", website: "Website" },
+    mailtoSubject: (v) => `Website inquiry from ${v.name || v.business || "the website"}`,
   });
-  // Honeypot: hidden from people, tempting to bots. Must stay empty.
-  const [nickname, setNickname] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const statusRef = useRef<HTMLDivElement>(null);
+  const { status, sending, error, fieldErrors, statusRef, reset, mailtoHref } = form;
 
-  const set = (key: FieldName) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setValues((v) => ({ ...v, [key]: e.target.value }));
-    if (fieldErrors[key]) setFieldErrors((f) => ({ ...f, [key]: undefined }));
-  };
-
-  // Fallback if sending fails: the visitor's mail app with everything filled in.
-  const mailtoHref = () => {
-    const subject = `Website inquiry from ${values.name || values.business || "the website"}`;
-    const body = [
-      `Name: ${values.name}`,
-      `Email: ${values.email}`,
-      `Business: ${values.business}`,
-      values.website ? `Website: ${values.website}` : null,
-      "",
-      values.message,
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
-    return `mailto:${contact.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  };
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (status === "sending") return;
-    setStatus("sending");
-    setError("");
-    setFieldErrors({});
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
-    try {
-      const res = await fetch(contact.endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ ...values, nickname }),
-        signal: controller.signal,
-      });
-      const data: { ok?: boolean; error?: string; fields?: FieldErrors } = await res
-        .json()
-        .catch(() => ({}));
-      if (res.ok && data.ok) {
-        setStatus("success");
-        requestAnimationFrame(() => statusRef.current?.focus());
-        return;
-      }
-      setFieldErrors(data.fields ?? {});
-      setError(data.error || contact.status.errorGeneric);
-      setStatus("error");
-    } catch {
-      setError(contact.status.errorGeneric);
-      setStatus("error");
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  const reset = () => {
-    setValues({ name: "", email: "", business: "", website: "", message: "" });
-    setStatus("idle");
-  };
-
-  const fieldProps = (key: FieldName) => ({
-    id: `sites-${key}`,
-    name: key,
-    value: values[key],
-    onChange: set(key),
-    className: "form-field",
-    "aria-invalid": fieldErrors[key] ? true : undefined,
-    "aria-describedby": fieldErrors[key] ? `sites-${key}-error` : undefined,
-  });
+  const fieldProps = (key: FieldName) => ({ ...form.fieldProps(key), className: "form-field" });
 
   const fieldError = (key: FieldName) =>
     fieldErrors[key] ? (
-      <p id={`sites-${key}-error`} className="sites-field-error">
+      <p id={form.errorId(key)} className="sites-field-error">
         {fieldErrors[key]}
       </p>
     ) : null;
-
-  const sending = status === "sending";
 
   return (
     <SectionShell
@@ -142,7 +67,7 @@ export default function SitesContact() {
             </div>
           ) : (
             <form
-              onSubmit={onSubmit}
+              onSubmit={form.submit}
               aria-busy={sending}
               className="grid grid-cols-1 sm:grid-cols-2"
               style={{ gap: "18px 16px" }}
@@ -202,15 +127,7 @@ export default function SitesContact() {
                   screen readers. Real visitors never fill it in. */}
               <div className="sites-hp" aria-hidden="true">
                 <label htmlFor="sites-nickname">Leave this field empty</label>
-                <input
-                  id="sites-nickname"
-                  name="nickname"
-                  type="text"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                />
+                <input {...form.honeypotProps} />
               </div>
 
               {status === "error" && (

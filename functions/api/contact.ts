@@ -1,8 +1,8 @@
 /**
  * Cloudflare Pages Function: POST /api/contact
  *
- * Receives the /websites contact form and emails it through the Resend HTTP
- * API. The site itself is a static Next.js export (next.config.ts:
+ * Receives the contact forms on /websites and /infrastructure and emails
+ * them through the Resend HTTP API. The site itself is a static Next.js export (next.config.ts:
  * output "export"), so this lives in Cloudflare Pages' /functions directory
  * rather than in the Next app. See CONTACT_SETUP.md for configuration.
  *
@@ -11,8 +11,10 @@
  *   CONTACT_TO      optional, comma-separated, default willbarnh@gmail.com
  *   CONTACT_FROM    optional, default "Website Contact <contact@litendurance.dev>"
  *
- * Accepts JSON or form-encoded bodies with: name, email, business, website
- * (optional), message, and the honeypot field `nickname` (must stay empty).
+ * Accepts JSON or form-encoded bodies with: source ("websites" or
+ * "infrastructure"; defaults to "websites"), name, email, business (required
+ * for websites, optional otherwise), website (optional), message, and the
+ * honeypot field `nickname` (must stay empty).
  * Responds with JSON: { ok: true } or { ok: false, error, fields? }.
  */
 
@@ -43,9 +45,21 @@ const LIMITS = {
   message: 5000,
 } as const;
 
-type Field = keyof typeof LIMITS;
+type Field = keyof typeof LIMITS | "source";
+
+/** Which page's form sent the message. Decides the required fields and the
+ *  email subject. */
+export const SOURCES = {
+  websites: { label: "website", page: "/websites", requireBusiness: true },
+  infrastructure: { label: "infrastructure", page: "/infrastructure", requireBusiness: false },
+} as const;
+
+export type ContactSource = keyof typeof SOURCES;
+
+const isSource = (v: string): v is ContactSource => Object.prototype.hasOwnProperty.call(SOURCES, v);
 
 export interface ContactInput {
+  source: ContactSource;
   name: string;
   email: string;
   business: string;
@@ -78,7 +92,10 @@ export function validate(raw: Record<string, unknown>): {
   data?: ContactInput;
   fields?: Partial<Record<Field, string>>;
 } {
+  const rawSource = clean(raw.source) || "websites";
+  const source: ContactSource = isSource(rawSource) ? rawSource : "websites";
   const data: ContactInput = {
+    source,
     name: clean(raw.name),
     email: clean(raw.email),
     business: clean(raw.business),
@@ -87,10 +104,12 @@ export function validate(raw: Record<string, unknown>): {
   };
   const fields: Partial<Record<Field, string>> = {};
 
+  if (!isSource(rawSource)) fields.source = "Unknown form.";
+
   if (!data.name) fields.name = "Please add your name.";
   if (!data.email) fields.email = "Please add your email address.";
   else if (!EMAIL_RE.test(data.email)) fields.email = "That email address doesn't look right.";
-  if (!data.business) fields.business = "Please add your business name.";
+  if (!data.business && SOURCES[source].requireBusiness) fields.business = "Please add your business name.";
   if (data.website) {
     const candidate = /^https?:\/\//i.test(data.website) ? data.website : `https://${data.website}`;
     try {
@@ -103,7 +122,7 @@ export function validate(raw: Record<string, unknown>): {
   }
   if (!data.message) fields.message = "Please tell me a little about what you need.";
 
-  for (const key of Object.keys(LIMITS) as Field[]) {
+  for (const key of Object.keys(LIMITS) as (keyof typeof LIMITS)[]) {
     if (!fields[key] && data[key].length > LIMITS[key]) {
       fields[key] = `Please keep this under ${LIMITS[key]} characters.`;
     }
@@ -122,16 +141,20 @@ function escapeHtml(s: string): string {
 }
 
 export function buildEmail(d: ContactInput) {
-  const subject = `New website inquiry from ${d.name}`.slice(0, 200);
+  const { label, page, requireBusiness } = SOURCES[d.source];
+  const subject = `New ${label} inquiry from ${d.name}`.slice(0, 200);
+  // The websites form always asks for business and website, so show both
+  // (website as "(none)" when blank); other forms only list what was given.
   const rows: [string, string][] = [
     ["Name", d.name],
     ["Email", d.email],
-    ["Business", d.business],
-    ["Website", d.website || "(none)"],
+    ...(requireBusiness || d.business ? [["Business", d.business] as [string, string]] : []),
+    ...(requireBusiness || d.website ? [["Website", d.website || "(none)"] as [string, string]] : []),
+    ["Form", page],
   ];
-  const text = [...rows.map(([k, v]) => `${k}: ${v}`), "", d.message, "", "— Sent from the /websites contact form"].join("\n");
+  const text = [...rows.map(([k, v]) => `${k}: ${v}`), "", d.message, "", `— Sent from the ${page} contact form`].join("\n");
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#111">
-<h2 style="margin:0 0 12px;font-size:18px">New website inquiry</h2>
+<h2 style="margin:0 0 12px;font-size:18px">New ${label} inquiry</h2>
 <table style="border-collapse:collapse;margin-bottom:16px">${rows
     .map(
       ([k, v]) =>
@@ -139,7 +162,7 @@ export function buildEmail(d: ContactInput) {
     )
     .join("")}</table>
 <div style="white-space:pre-wrap;border-left:3px solid #4ecdc4;padding-left:12px">${escapeHtml(d.message)}</div>
-<p style="margin-top:20px;color:#888;font-size:12px">Sent from the /websites contact form. Reply to this email to answer ${escapeHtml(d.name)} directly.</p>
+<p style="margin-top:20px;color:#888;font-size:12px">Sent from the ${page} contact form. Reply to this email to answer ${escapeHtml(d.name)} directly.</p>
 </div>`;
   return { subject, text, html };
 }

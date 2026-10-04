@@ -87,13 +87,41 @@ check("newlines are stripped from the name (no header injection)", calls.at(-1).
 const afterInjection = calls.length;
 check("nothing sent for invalid submissions", afterInjection === n + 1);
 
+// 3b. Source: websites (explicit) vs infrastructure
+r = await call(req({ ...good, source: "websites" }));
+check("source=websites keeps the website subject", r.status === 200 && calls.at(-1).body.subject === "New website inquiry from Jane Doe");
+check("websites body names its form", calls.at(-1).body.text.includes("Form: /websites") && calls.at(-1).body.text.includes("Sent from the /websites contact form"));
+r = await call(req({ ...good, source: "websites", business: "" }));
+check("source=websites still requires a business name", r.status === 400 && !!r.data.fields?.business);
+const infra = { source: "infrastructure", name: "Sam Ops", email: "sam@corp.example", message: "Need help with a Proxmox cluster.", nickname: "" };
+const beforeInfra = calls.length;
+r = await call(req(infra));
+const infraSent = calls.at(-1);
+check("source=infrastructure without business returns 200", r.status === 200 && r.data.ok === true && calls.length === beforeInfra + 1, `status ${r.status} ${JSON.stringify(r.data)}`);
+check("infrastructure subject", infraSent?.body.subject === "New infrastructure inquiry from Sam Ops");
+check("infrastructure reply_to is the visitor", infraSent?.body.reply_to === "sam@corp.example");
+check("infrastructure body names its form", infraSent?.body.text.includes("Form: /infrastructure") && infraSent?.body.html.includes("New infrastructure inquiry") && infraSent?.body.html.includes("/infrastructure contact form"));
+check("infrastructure body omits empty business/website rows", !infraSent?.body.text.includes("Business:") && !infraSent?.body.text.includes("Website:"));
+r = await call(req({ ...infra, business: "Corp Inc" }));
+check("infrastructure includes business when given", calls.at(-1).body.text.includes("Business: Corp Inc"));
+r = await call(req({ ...infra, name: "", email: "bad", message: "" }));
+check("infrastructure still validates name/email/message", r.status === 400 && ["name", "email", "message"].every((k) => r.data.fields?.[k]) && !r.data.fields?.business);
+r = await call(req(new URLSearchParams(infra).toString(), { type: "application/x-www-form-urlencoded" }));
+check("infrastructure form-encoded body accepted", r.status === 200 && calls.at(-1).body.subject === "New infrastructure inquiry from Sam Ops");
+const beforeUnknown = calls.length;
+r = await call(req({ ...good, source: "toString" }));
+check("unknown source is rejected, nothing sent", r.status === 400 && !!r.data.fields?.source && calls.length === beforeUnknown);
+r = await call(req({ ...infra, nickname: "bot" }));
+check("infrastructure honeypot sends nothing", r.status === 200 && r.data.ok && calls.length === beforeUnknown);
+
 // 4. Honeypot
+const beforeHoneypot = calls.length;
 r = await call(req({ ...good, nickname: "bot-filled" }));
-check("honeypot: pretends success, sends nothing", r.status === 200 && r.data.ok && calls.length === afterInjection);
+check("honeypot: pretends success, sends nothing", r.status === 200 && r.data.ok && calls.length === beforeHoneypot);
 
 // 5. Form-encoded body
 r = await call(req(new URLSearchParams(good).toString(), { type: "application/x-www-form-urlencoded" }));
-check("form-encoded body accepted", r.status === 200 && calls.length === afterInjection + 1);
+check("form-encoded body accepted", r.status === 200 && calls.length === beforeHoneypot + 1);
 
 // 6. Bad requests
 r = await call(req("{not json"));
@@ -110,6 +138,12 @@ check("Resend failure returns 502", r.status === 502 && r.data.ok === false);
 resendStatus = 200;
 const other = await fn.onRequest({ request: req(null, { method: "GET" }), env });
 check("non-POST returns 405", other.status === 405 && other.headers.get("Allow") === "POST");
+
+// 7. Client hook (src/hooks/useContactForm.ts) agrees with the function
+const hook = readFileSync(join(root, "src/hooks/useContactForm.ts"), "utf8");
+check("client honeypot name matches the function", hook.includes(`CONTACT_HONEYPOT = "${fn.HONEYPOT_FIELD}"`));
+const clientSources = (hook.match(/export type ContactSource = ([^;]+);/)?.[1] ?? "").match(/"[^"]+"/g)?.map((x) => x.slice(1, -1)) ?? [];
+check("client sources match the function's SOURCES", clientSources.length > 0 && clientSources.sort().join() === Object.keys(fn.SOURCES).sort().join(), clientSources.join(","));
 
 console.error = quiet;
 rmSync(dir, { recursive: true, force: true });
