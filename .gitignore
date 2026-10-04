@@ -53,3 +53,7 @@ yarn-error.log*
 
 # Root duplicate resume (canonical copy lives in public/)
 /IT Focused Resume - Google Docs.pdf
+
+# Cloudflare Pages Functions local dev (wrangler pages dev)
+.dev.vars
+.wrangler/

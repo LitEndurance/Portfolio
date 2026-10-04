@@ -285,9 +285,9 @@ export default function QualityStovesCaseStudy() {
         style={{
           border: "1px solid rgba(78, 205, 196, 0.16)",
           background: "rgba(78, 205, 196, 0.03)",
-          borderRadius: "4px",
-          padding: "clamp(20px, 3vw, 36px)",
-          marginBottom: "40px",
+          borderRadius: "8px",
+          padding: "clamp(16px, 3vw, 32px)",
+          marginBottom: "24px",
         }}
       >
         <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -353,27 +353,16 @@ export default function QualityStovesCaseStudy() {
           }}
         >
           Replaced a stove and spa retailer&apos;s aging Showit site with a custom
-          Next.js build — statically prerendered, edge-cached on Cloudflare, with
-          product manuals moved to R2 object storage and lead forms piped through
-          n8n into NetSuite. n8n sits in front of the NetSuite API as an
-          aggregator: it validates, normalizes, and reshapes every submission
-          before it hits the ERP, so data manipulation lives in workflows instead
-          of site code. Failed writes retry instead of dropping leads, API
-          credentials stay server-side, and new integrations bolt on without a
-          redeploy. Launched August 12, 2026; every number below is measured
-          after launch.
+          Next.js build — statically prerendered and edge-cached on Cloudflare,
+          with product manuals moved to R2 object storage. Launched August 12,
+          2026; every number below is measured after launch.
         </p>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* 2x2 rather than 4-up: inside the 860px panel four columns left
+            ~150px per stat and wrapped every label. */}
+        <div className="card-grid min-[480px]:grid-cols-2" style={{ marginBottom: "32px" }}>
           {OUTCOMES.map(({ value, label, detail }) => (
-            <div
-              key={label}
-              style={{
-                border: "1px solid rgba(78, 205, 196, 0.1)",
-                borderRadius: "3px",
-                padding: "14px",
-              }}
-            >
+            <div key={label} className="content-card" style={{ padding: "16px 18px" }}>
               <p
                 style={{
                   ...mono,
@@ -388,28 +377,30 @@ export default function QualityStovesCaseStudy() {
               <p
                 style={{
                   ...mono,
-                  fontSize: "10px",
+                  fontSize: "11px",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
-                  color: "rgba(232, 236, 241, 0.7)",
-                  marginTop: "4px",
+                  color: "rgba(232, 236, 241, 0.8)",
+                  marginTop: "8px",
                 }}
               >
                 {label}
               </p>
-              <p style={{ ...mono, fontSize: "10px", color: "rgba(78, 205, 196, 0.5)", marginTop: "4px" }}>
+              <p style={{ ...mono, fontSize: "11px", lineHeight: 1.5, color: "rgba(78, 205, 196, 0.6)", marginTop: "4px" }}>
                 {detail}
               </p>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
+        {/* Stacked: side by side, the chart's 820-unit viewBox shrank to
+            ~340px and its axis labels became unreadable. */}
+        <div className="grid grid-cols-1 gap-8 mb-6">
           <ResponseTimeChart />
           <LighthouseBars />
         </div>
 
-        <p style={{ ...mono, fontSize: "9px", color: "rgba(232, 236, 241, 0.3)" }}>
+        <p style={{ ...mono, fontSize: "10px", lineHeight: 1.6, color: "rgba(232, 236, 241, 0.45)" }}>
           Sources: Google Search Console crawl stats (Jun 20 – Sep 17, 2026) ·
           Lighthouse 13.4.1 via PageSpeed Insights, desktop (Sep 19, 2026) · GA4
           (Aug 13 – Sep 19, 2025 vs 2026; lead events Jun 13 – Jul 19 vs Aug 13 –

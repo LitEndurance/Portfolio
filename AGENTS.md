@@ -2,7 +2,7 @@
 
 ## Identity
 
-This is **William Barnhart Portfolio** — a single-page, climb-themed developer portfolio built with Next.js, React, TypeScript, Tailwind CSS, GSAP, and Three.js. It tells a career story as an ascent: each section is a *zone* on a mountain, and the 3D mountain reacts to scroll progress.
+This is **William Barnhart Portfolio** — a climb-themed developer portfolio built with Next.js, React, TypeScript, Tailwind CSS, GSAP, and Three.js. It tells a career story as an ascent: each section is a *zone* on a mountain, and the 3D mountain reacts to scroll progress. `/` is a trail-selection page offering two routes on the same night theme: `/infrastructure` is the sysadmin climb (SummitOS boot + 3D mountain), and `/websites` is the plain-language web-dev trail for business owners (no boot, Inter body copy, all copy in `src/content/sites.ts`).
 
 ## Tech Stack
 

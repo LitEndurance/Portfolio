@@ -170,16 +170,29 @@ export default function Footer() {
         </div>
 
         <FadeIn delay={0.5}>
-          <p
-            className="mt-10"
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "11px",
-              color: "rgba(78, 205, 196, 0.5)",
-            }}
-          >
-            &copy; 2025 William Barnhart. All rights reserved.
-          </p>
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                color: "rgba(78, 205, 196, 0.5)",
+              }}
+            >
+              &copy; {new Date().getFullYear()} William Barnhart. All rights reserved.
+            </p>
+            <a
+              href="/websites"
+              className="transition-opacity duration-300 hover:opacity-70"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                color: "#d4a843",
+                textDecoration: "none",
+              }}
+            >
+              Need a website for your business? Take the web dev trail &rarr;
+            </a>
+          </div>
         </FadeIn>
       </div>
     </footer>

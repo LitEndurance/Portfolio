@@ -13,7 +13,14 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { soundEngine } from "@/lib/soundEngine";
 import { throttleRaf } from "@/lib/throttleRaf";
 import { useClimb, type Zone } from "@/components/ClimbContext";
-import { ZONES, progressToZone, zoneTrailT } from "@/components/zoneConfig";
+import {
+  TRAILS,
+  orbThresholds as trailOrbThresholds,
+  stopIndexAt,
+  trailHoopPoint,
+  type TrailId,
+} from "@/components/trails";
+import type { CheckpointEffect } from "@/components/trailTypes";
 import type { DeviceTier } from "@/hooks/useDeviceTier";
 import { getQualityProfile } from "@/lib/mountain/quality";
 import {
@@ -1096,10 +1103,16 @@ function createGlowTexture(
 
 interface Mountain3DProps {
   quality?: DeviceTier;
+  /**
+   * Which page's route to climb. Each page has its own hoop route, section
+   * stops, and camera path (see trails.ts); only the infrastructure trail
+   * feeds the summit-climb game state.
+   */
+  trail?: TrailId;
 }
 
 const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain3D(
-  { quality = "high" },
+  { quality = "high", trail: trailId = "infrastructure" },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1109,13 +1122,15 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
   const sceneRef = useRef<THREE.Scene | null>(null);
   const {
     bootStage,
-    currentZone,
     summitReached,
     setBootStage,
     setZone,
     markCheckpoint,
   } = useClimb();
-  const lastZoneRef = useRef<Zone | null>(null);
+  // The trail is fixed for the lifetime of the page (one per route), so the
+  // scene effect below reads it once from this ref.
+  const trailRef = useRef(TRAILS[trailId]);
+  const lastZoneRef = useRef<string | null>(null);
   const zoneEnterTimeRef = useRef<number>(0);
   const checkpointTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summitFlareTriggeredRef = useRef(false);
@@ -1139,11 +1154,10 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
   const burstPoolRef = useRef<TransientParticlePool | null>(null);
   const flagSpawnedRef = useRef(false);
   const markerGroupRef = useRef<THREE.Group | null>(null);
-  const currentZoneRef = useRef<Zone | null>(currentZone);
-
-  useEffect(() => {
-    currentZoneRef.current = currentZone;
-  }, [currentZone]);
+  // Stop (page section id) the scroll position is currently in. Tracked
+  // locally rather than via ClimbContext so pages that don't run the climb
+  // game still highlight the right hoop.
+  const activeStopRef = useRef<string | null>(null);
 
   const reactionHandlerRef = useRef<(type: string, payload?: unknown) => void>(
     () => {}
@@ -1163,6 +1177,10 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     if (!container) return;
 
     setBootStage("booting");
+
+    const trailCfg = trailRef.current;
+    const stopIds = trailCfg.stops.map((s) => s.id);
+    const route = trailCfg.route;
 
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
@@ -1240,7 +1258,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     let updateCamera: ((progress: number) => void) | null = null;
     let mountainMesh: THREE.Mesh | null = null;
     let isCleanedUp = false;
-    let cameraBasePosition = new THREE.Vector3();
+    const cameraBasePosition = new THREE.Vector3();
     let trail: ClimberTrail | null = null;
     let markerRaycaster: MarkerRaycaster | null = null;
 
@@ -1248,23 +1266,22 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
     const reactionGroup = new THREE.Group();
     scene.add(reactionGroup);
 
+    // Smooth curve through every hoop (and the via points between them) that
+    // the orb climbs and the camera tracks. Built once the mountain loads.
     let pathCurve: THREE.CatmullRomCurve3 | null = null;
     let summitPos: THREE.Vector3 | null = null;
 
     function getActiveMarkerPosition(): THREE.Vector3 {
-      const zone = currentZoneRef.current || "hero";
-      const marker = markersRef.current.find((m) => m.zone === zone);
+      const stop = activeStopRef.current || stopIds[0];
+      const marker = markersRef.current.find((m) => m.stop === stop);
       if (marker) {
         return marker.portal.position.clone();
       }
-      const curve = pathCurveRef.current || pathCurve;
-      if (curve) {
-        const pos = curve.getPoint(Math.max(0, Math.min(1, zoneTrailT(zone))));
-        return pos.clone().add(new THREE.Vector3(0, 1.2, 0));
-      }
-      return summitPos
-        ? summitPos.clone().add(new THREE.Vector3(0, -5, 0))
-        : new THREE.Vector3(0, 5, 0);
+      // Stops without a visible hoop (the summit, and the infrastructure
+      // hero) fall back to the route point they share: the previous hoop, or
+      // the summit route point itself.
+      const hoop = trailHoopPoint(trailCfg, stop);
+      return new THREE.Vector3(hoop.x, hoop.y + 0.4, hoop.z);
     }
 
     interface TransientEffect {
@@ -1506,11 +1523,9 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         // instead of jutting out below the environment. A slightly deeper
         // sink hides the flat cut-off edge of the mesh while keeping the
         // ridge trail and landmarks clearly visible.
+        // hoopRoutes/*.json are authored in these sunk world coordinates.
         const sinkY = -3.0;
         geometry.translate(0, sinkY, 0);
-        mountainData.pathPoints.forEach((p) => {
-          p.y += sinkY;
-        });
 
         // Create mesh. Low tier swaps Standard PBR for Lambert: still fully
         // lit (moon key light, rim, camera fill, shadows), but without the
@@ -1567,69 +1582,77 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         // Update summit light to actual peak
         summitLight.position.set(highestX, summitY + 3, highestZ);
 
-        // ─── Camera Path ───────────────────────────────
-        // Landmark-driven orbit: the camera makes a single continuous clockwise
-        // sweep around the mountain while its look-at target climbs the actual
-        // ridge trail embedded in the binary. Radius and height curves give
-        // smooth zoom-in / zoom-out transitions at each landmark.
+        // ─── Hoop Route & Camera Path ──────────────────
+        // Each page climbs its own hand-tuned route (hoopRoutes/<trail>.json).
+        // Infrastructure spirals counter-clockwise around the peak: front
+        // base → east wall → back face → west shoulder → summit. Websites
+        // zig-zags up the front face to the summit. Every route point was
+        // sampled against the mountain heightmap so the orb and hoops stay
+        // above the rock. The camera follows the trail's landmarks, always
+        // looking at the orb so each hoop is framed as the user scrolls into
+        // its section.
         pathCurve = new THREE.CatmullRomCurve3(
-          mountainData.pathPoints,
+          route.points.map((p) => new THREE.Vector3(p.x, p.y, p.z)),
           false,
           "centripetal"
         );
+        pathCurve.arcLengthDivisions = 200;
+        orbCurveRef.current = pathCurve;
 
         interface Landmark {
           progress: number; // scroll progress
-          trailT: number;   // position along the ridge trail (0=base, 1=summit)
           angle: number;    // azimuth around mountain center (radians)
           radius: number;   // horizontal distance from mountain center
-          camY: number;     // absolute camera height
+          camY: number;     // camera height above the look-at target
         }
 
-        // Derive markers and camera landmarks from the centralized zone config.
-        // This removes the duplicated zone tables that used to live here.
-        // The summit/contact marker is omitted so the peak stays clean. A
-        // synthetic Base Camp hoop is added at the front/center base; the old
-        // hero/trailhead hoop is removed so the climb starts from Base Camp.
+        // Scroll progress at which the orb reaches each route hoop: the
+        // trailhead hoop at 0, every later hoop when its stop begins.
+        const orbThresholds = trailOrbThresholds(trailCfg);
+
+        // Derive markers and camera landmarks from the trail config and its
+        // hoop route. The final (summit) hoop is omitted so the peak stays
+        // clean; the first hoop sits at the trailhead where the climb begins
+        // (the infrastructure hero zone shares Base Camp, so it has no hoop of
+        // its own).
+        const stopMeta = (id: string) => trailCfg.stops.find((s) => s.id === id);
         const MARKERS: {
           t: number;
-          zone: Zone;
+          stop: string;
           icon: string;
           label: string;
-        }[] = [
-          { t: 0.06, zone: "about", icon: "🚩", label: "Base Camp" },
-          ...ZONES.filter(
-            (z) =>
-              z.zone !== "contact" &&
-              z.zone !== "hero" &&
-              z.zone !== "about"
-          ).map((z) => ({
-            t: z.trailT,
-            zone: z.zone,
-            icon: z.icon,
-            label: z.label,
-          })),
-        ];
+          position: THREE.Vector3;
+        }[] = route.hoopIndices.slice(0, -1).map((pointIndex, k) => {
+          const p = route.points[pointIndex];
+          const stop = p.hoop as string;
+          return {
+            // Scroll progress at which the orb arrives at this hoop; used to
+            // brighten hoops the climber is approaching.
+            t: orbThresholds[k],
+            stop,
+            icon: stopMeta(stop)?.icon ?? "🚩",
+            label: stopMeta(stop)?.label ?? p.label ?? "",
+            position: new THREE.Vector3(p.x, p.y, p.z),
+          };
+        });
 
         const landmarks: Landmark[] = [
-          // The climb begins at the Base Camp marker on the front/center base.
+          // The climb begins at the trailhead hoop on the front base.
           {
             progress: 0.0,
-            trailT: 0.06,
             angle: Math.PI / 2,
             radius: 30,
             camY: 3,
           },
-          ...ZONES.map((z) => ({
-            progress: z.landmark.progress,
-            trailT: z.trailT,
-            angle: z.landmark.angle,
-            radius: z.landmark.radius,
-            camY: z.landmark.camY,
+          ...trailCfg.stops.map((s) => ({
+            progress: s.landmark.progress,
+            angle: s.landmark.angle,
+            radius: s.landmark.radius,
+            camY: s.landmark.camY,
           })),
           // Mid pull-back: keep the camera moving away from the summit so the
           // zoom-out feels gradual rather than a sudden snap at the very end.
-          { progress: 0.975, trailT: 0.98, angle: 0.9, radius: 18, camY: 7 },
+          { ...trailCfg.pullBack },
           // ── FINAL SUMMIT PULL-BACK ───────────────────────────────────────
           // AUTHOR'S INTENT — DO NOT CHANGE. The climb ends by easing back
           // toward the Base Camp / city trailhead (angle = Math.PI / 2) with a
@@ -1638,15 +1661,24 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           // The pull-back is intentionally drawn out across the summit section
           // and all the way to the footer; do not make it faster or wider.
           // ──────────────────────────────────────────────────────────────────
-          { progress: 1.0, trailT: 1.0, angle: Math.PI / 2, radius: 22, camY: 6 },
+          { progress: 1.0, angle: Math.PI / 2, radius: 22, camY: 6 },
         ];
+
+        // Unwrap the azimuths so each step turns the short way (|Δ| ≤ π). The
+        // infrastructure spiral keeps turning in one direction, so the final
+        // Math.PI / 2 above resolves to the same front-facing angle one full
+        // orbit later instead of spinning the camera back around the mountain.
+        for (let i = 1; i < landmarks.length; i++) {
+          const prev = landmarks[i - 1].angle;
+          while (landmarks[i].angle - prev > Math.PI) landmarks[i].angle -= Math.PI * 2;
+          while (landmarks[i].angle - prev < -Math.PI) landmarks[i].angle += Math.PI * 2;
+        }
 
         // Precomputed column arrays so the per-scroll interpolation below
         // doesn't allocate four throwaway arrays on every scroll tick.
         const landmarkAngles = landmarks.map((lm) => lm.angle);
         const landmarkRadii = landmarks.map((lm) => lm.radius);
         const landmarkCamYs = landmarks.map((lm) => lm.camY);
-        const landmarkTrailTs = landmarks.map((lm) => lm.trailT);
         const mountainCenterVec = new THREE.Vector3(centerX, centerY, centerZ);
         const posePos = new THREE.Vector3();
         const poseLookAt = new THREE.Vector3();
@@ -1685,21 +1717,69 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           return values[i0] + (values[i1] - values[i0]) * easeInOutQuad(t);
         }
 
+        // Compute the orb's target position by sampling the route curve that
+        // passes through every marker hoop (orbThresholds above), arriving at
+        // each hoop exactly when its stop begins.
+
+        // Reused target for getOrbPosition so the per-frame call in the
+        // animation loop doesn't allocate a new Vector3 every frame. Callers
+        // must copy the result if they need to retain it.
+        const orbTargetTmp = new THREE.Vector3();
+
+        function getRoutePoint(progress: number, target: THREE.Vector3): THREE.Vector3 {
+          // Find the segment the current progress falls into.
+          let idx = 0;
+          for (let i = 0; i < orbThresholds.length - 1; i++) {
+            if (
+              progress >= orbThresholds[i] &&
+              progress < orbThresholds[i + 1]
+            ) {
+              idx = i;
+              break;
+            }
+          }
+          if (progress >= orbThresholds[orbThresholds.length - 1]) {
+            idx = orbThresholds.length - 1;
+          }
+
+          const segmentStart = orbThresholds[idx];
+          const segmentEnd =
+            orbThresholds[Math.min(idx + 1, orbThresholds.length - 1)];
+          const rawT =
+            segmentEnd === segmentStart
+              ? 0
+              : (progress - segmentStart) / (segmentEnd - segmentStart);
+          const easedT = easeInOutQuad(Math.max(0, Math.min(1, rawT)));
+
+          // hoopCurveT holds each hoop's exact curve parameter (via points
+          // sit between them), so interpolating between consecutive hoop
+          // parameters guarantees the orb passes through every hoop.
+          const curveT = route.hoopCurveT;
+          const t0 = curveT[idx];
+          const t1 = curveT[Math.min(idx + 1, curveT.length - 1)];
+          const t = t0 + (t1 - t0) * easedT;
+          return pathCurve!.getPoint(Math.max(0, Math.min(1, t)), target);
+        }
+
+        function getOrbPosition(progress: number): THREE.Vector3 {
+          return getRoutePoint(progress, orbTargetTmp);
+        }
+        getOrbPositionRef.current = getOrbPosition;
+
         function getCameraPose(progress: number): { pos: THREE.Vector3; lookAt: THREE.Vector3 } {
           // Orbit the camera around the mountain as the user climbs, keeping
-          // the moonlight and ridge trail in view at each landmark. Writes
+          // the moonlight and hoop route in view at each landmark. Writes
           // into the preallocated pose vectors — no per-call allocation.
           const angle = interpolateValue(landmarkAngles, progress);
           const radius = interpolateEase(landmarkRadii, progress);
           const camYOffset = interpolateEase(landmarkCamYs, progress);
-          const trailT = interpolateValue(landmarkTrailTs, progress);
 
-          // Look at the current trail point so the camera tracks the ridge line
-          // and passes each marker as it climbs.
-          const target = pathCurve!.getPoint(Math.max(0, Math.min(1, trailT)), poseLookAt);
+          // Look at the orb's spot on the hoop route so the camera follows the
+          // climber and frames each hoop as it arrives.
+          const target = getRoutePoint(progress, poseLookAt);
           target.y += 0.5;
 
-          // At the very end, ease the gaze from the summit trail to the mountain
+          // At the very end, ease the gaze from the summit to the mountain
           // center so the final shot frames the entire mountain.
           const pullBackStart = landmarks[landmarks.length - 2].progress;
           const pullBack = THREE.MathUtils.smoothstep(progress, pullBackStart, 1.0);
@@ -1731,65 +1811,6 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           // moving light source and its glow is updated in the animation loop.
         };
 
-        // Compute the orb's target position by sampling the smooth curve that
-        // passes through every marker hoop. This guarantees the orb travels
-        // Base Camp → Gear Wall → Summit Log → Trail Markers → Summit while
-        // winding around the mountain instead of cutting through it.
-        const orbThresholds = [
-          0,
-          ZONES[2].progressStart, // Gear Wall
-          ZONES[3].progressStart, // Summit Log
-          ZONES[4].progressStart, // Trail Markers
-          ZONES[5].progressStart, // Summit
-        ];
-
-        // Reused target for getOrbPosition so the per-frame call in the
-        // animation loop doesn't allocate a new Vector3 every frame. Callers
-        // must copy the result if they need to retain it.
-        const orbTargetTmp = new THREE.Vector3();
-
-        function getOrbPosition(progress: number): THREE.Vector3 {
-          const curve = orbCurveRef.current;
-          if (!curve || curve.points.length === 0) {
-            return pathCurve!.getPoint(0, orbTargetTmp);
-          }
-
-          // Find the segment the current progress falls into.
-          let idx = 0;
-          for (let i = 0; i < orbThresholds.length - 1; i++) {
-            if (
-              progress >= orbThresholds[i] &&
-              progress < orbThresholds[i + 1]
-            ) {
-              idx = i;
-              break;
-            }
-          }
-          if (progress >= orbThresholds[orbThresholds.length - 1]) {
-            idx = orbThresholds.length - 1;
-          }
-
-          const segmentStart = orbThresholds[idx];
-          const segmentEnd =
-            orbThresholds[Math.min(idx + 1, orbThresholds.length - 1)];
-          const rawT =
-            segmentEnd === segmentStart
-              ? 0
-              : (progress - segmentStart) / (segmentEnd - segmentStart);
-          const easedT = easeInOutQuad(Math.max(0, Math.min(1, rawT)));
-
-          // The curve was built from the hoop points, so its parameter t maps
-          // evenly to the hoops: t=0, 0.25, 0.5, 0.75, 1.0. Interpolating in
-          // this parameter space guarantees the orb passes exactly through
-          // each landmark.
-          const segmentCount = orbThresholds.length - 1;
-          const t0 = idx / segmentCount;
-          const t1 = Math.min(idx + 1, segmentCount) / segmentCount;
-          const t = t0 + (t1 - t0) * easedT;
-          return curve.getPoint(Math.max(0, Math.min(1, t)), orbTargetTmp);
-        }
-        getOrbPositionRef.current = getOrbPosition;
-
         updateCamera(0);
 
         // ─── Trail Markers ─────────────────────────────────
@@ -1810,16 +1831,9 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         markerGroup.userData.hoverRingTexture = sharedHoverRingTexture;
 
         MARKERS.forEach((m) => {
-          const basePosition = pathCurve!.getPoint(Math.max(0, Math.min(1, m.t)));
-          basePosition.y += 0.8;
-
-          // Place the Base Camp hoop at the front/center base of the mountain
-          // so the climb starts from the center, not off to one side. Push it
-          // just past the bounding-box front face so it doesn't sit inside the rock.
-          if (m.zone === "about") {
-            const trailStart = pathCurve!.getPoint(0);
-            basePosition.set(centerX, trailStart.y + 0.2, bbox.max.z + 0.5);
-          }
+          // Route hoops already sit 0.8 above the sampled ground, so the flat
+          // ring (drawn 0.78 below) rests on the rock instead of inside it.
+          const basePosition = m.position.clone();
 
           // Pulsing ring base
           const ringMat = new THREE.MeshBasicMaterial({
@@ -1882,7 +1896,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
             portal,
             sprite,
             hoverRing,
-            zone: m.zone,
+            stop: m.stop,
             basePosition,
             t: m.t,
             hovered: false,
@@ -1896,82 +1910,15 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           ? new MarkerRaycaster(camera, markersRef.current)
           : null;
 
-        // Surface-pushing helper for the construction phase (uses the same
-        // bounding-ellipse logic as the animation loop).
-        function pushToSurfaceConstruction(
-          point: THREE.Vector3,
-          margin = 0.3
-        ): THREE.Vector3 {
-          const dx = point.x - centerX;
-          const dz = point.z - centerZ;
-          const r = Math.sqrt(dx * dx + dz * dz);
-          if (r < 0.001) return point;
-          const angle = Math.atan2(dz, dx);
-          const rx = (bbox.max.x - bbox.min.x) * 0.5;
-          const rz = (bbox.max.z - bbox.min.z) * 0.5;
-          const minR =
-            1 /
-              Math.sqrt(
-                (Math.cos(angle) * Math.cos(angle)) / (rx * rx) +
-                  (Math.sin(angle) * Math.sin(angle)) / (rz * rz)
-              ) +
-            margin;
-          if (r < minR) {
-            const scale = minR / r;
-            point.x = centerX + dx * scale;
-            point.z = centerZ + dz * scale;
-          }
-          return point;
-        }
-
-        // Build the list of marked hoops the traveler visits. The dot starts
-        // at Base Camp and then hops directly to each subsequent marked point
-        // (Gear Wall, Summit Log, Trail Markers, Summit) as scroll progress
-        // crosses each zone threshold, instead of sliding along the ridge trail.
-        const baseCampMarker = markersRef.current.find((m) => m.zone === "about");
-        const gearMarker = markersRef.current.find((m) => m.zone === "skills");
-        const summitLogMarker = markersRef.current.find(
-          (m) => m.zone === "projects"
-        );
-        const trailMarkersMarker = markersRef.current.find(
-          (m) => m.zone === "gallery"
-        );
-        if (
-          baseCampMarker &&
-          gearMarker &&
-          summitLogMarker &&
-          trailMarkersMarker &&
-          pathCurve
-        ) {
-          const summitPoint = pathCurve.getPoint(1).clone();
-          summitPoint.y += 0.8;
-
-          // Use the exact visible marker positions so the traveling orb passes
-          // through the hoops the user actually sees, not a separate pushed set.
-          hoopPositionsRef.current = [
-            baseCampMarker.basePosition.clone(),
-            gearMarker.basePosition.clone(),
-            summitLogMarker.basePosition.clone(),
-            trailMarkersMarker.basePosition.clone(),
-            summitPoint,
-          ];
-
-          // Build a smooth curve through the exact marker hoop positions so
-          // the orb winds up and around the mountain, passing through every
-          // landmark instead of cutting through the interior.
-          const orbCurve = new THREE.CatmullRomCurve3(
-            hoopPositionsRef.current.map((p) => p.clone()),
-            false,
-            "centripetal"
-          );
-          orbCurve.arcLengthDivisions = 200;
-          orbCurveRef.current = orbCurve;
-
-          const orbStart = getOrbPosition(0);
-          orbSmoothedRef.current = orbStart.clone();
-          markerLight.position.copy(orbStart);
-          orbGlow.position.copy(orbStart);
-        }
+        // The traveler visits every route hoop in order, ending at the summit.
+        hoopPositionsRef.current = route.hoopIndices.map((i) => {
+          const p = route.points[i];
+          return new THREE.Vector3(p.x, p.y, p.z);
+        });
+        const orbStart = getOrbPosition(0);
+        orbSmoothedRef.current = orbStart.clone();
+        markerLight.position.copy(orbStart);
+        orbGlow.position.copy(orbStart);
 
         // ─── Climber Sprite ────────────────────────────────
         const climberTexture = createClimberTexture();
@@ -2005,29 +1952,36 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
             markActivity();
             scrollProgressRef.current = self.progress;
             if (updateCamera) updateCamera(self.progress);
-            const zone = progressToZone(self.progress);
+            const stop = trailCfg.stops[stopIndexAt(trailCfg, self.progress)];
             const now = performance.now();
 
-            if (zone !== lastZoneRef.current) {
-              // Entered a new zone
-              lastZoneRef.current = zone;
+            if (stop.id !== lastZoneRef.current) {
+              // Entered a new stop
+              lastZoneRef.current = stop.id;
+              activeStopRef.current = stop.id;
               zoneEnterTimeRef.current = now;
-              const altitude = Math.round(self.progress * 8000);
-              setZone(zone, altitude);
 
-              // Clear any pending checkpoint from a previous zone
-              if (checkpointTimerRef.current) {
-                clearTimeout(checkpointTimerRef.current);
-                checkpointTimerRef.current = null;
+              // Only the infrastructure trail runs the summit-climb game;
+              // other pages must not write their section ids into it.
+              if (trailCfg.tracksClimb) {
+                const zone = stop.id as Zone;
+                const altitude = Math.round(self.progress * 8000);
+                setZone(zone, altitude);
+
+                // Clear any pending checkpoint from a previous zone
+                if (checkpointTimerRef.current) {
+                  clearTimeout(checkpointTimerRef.current);
+                  checkpointTimerRef.current = null;
+                }
+
+                // Mark checkpoint after dwell time
+                checkpointTimerRef.current = setTimeout(() => {
+                  markCheckpoint(zone);
+                }, CHECKPOINT_DWELL_MS);
               }
 
-              // Mark checkpoint after dwell time
-              checkpointTimerRef.current = setTimeout(() => {
-                markCheckpoint(zone);
-              }, CHECKPOINT_DWELL_MS);
-
               // Immediate ambient reaction when passing through a hoop.
-              triggerCheckpointReaction(zone);
+              triggerCheckpointReaction(stop.effect);
             }
 
             // Dedicated summit flare as the user reaches the very top.
@@ -2043,35 +1997,33 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           },
         });
 
-        // Per-zone ambient checkpoint reactions: light flicker, wind gust, or
-        // rockfall triggered as the orb passes each portal hoop.
-        function triggerCheckpointReaction(zone: Zone) {
+        // Per-stop ambient checkpoint reactions (see each trail's stop
+        // `effect`): light flicker, rockfall, or aurora triggered as the orb
+        // passes each portal hoop.
+        function triggerCheckpointReaction(effect: CheckpointEffect) {
           if (prefersReducedMotion) {
             flareSummitLight(1.5, 1.2);
             return;
           }
-          switch (zone) {
-            case "hero":
-              // Warm flicker as the orb leaves the Base Camp lights.
+          switch (effect) {
+            case "flicker":
+              // Warm flicker as the orb leaves the trailhead lights.
               flareSummitLight(1.6, 1.2);
               break;
-            case "about":
-              // Subtle checkpoint ambience.
-              break;
-            case "skills":
-              // Loose rockfall from the gear wall.
+            case "rockfall":
+              // Loose rockfall from the wall the hoop sits on.
               shakeCamera(0.4);
               spawnParticleBurst(getActiveMarkerPosition(), 0x8b7d6b, 18);
               break;
-            case "projects":
+            case "aurora":
               // Icy flare + aurora ripple.
               flareSummitLight(2.2, 1.6);
               boostAurora(1.5, 0x60e0f8);
               break;
-            case "gallery":
+            case "none":
               // Subtle checkpoint ambience.
               break;
-            case "contact":
+            case "summit":
               // Summit flare and celebratory burst.
               flareSummitLight(4.0, 3.0);
               if (summitPos) {
@@ -2083,8 +2035,8 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
         }
 
         // Ensure ScrollTrigger recalculates the page height and fires once
-        // so the initial zone/currentZone is set and the camera starts at
-        // the correct position for the current scroll offset.
+        // so the initial stop is set and the camera starts at the correct
+        // position for the current scroll offset.
         ScrollTrigger.refresh();
 
         // Explicitly set the initial zone from the current scroll position so
@@ -2093,9 +2045,12 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           ScrollTrigger.maxScroll(window) > 0
             ? window.scrollY / ScrollTrigger.maxScroll(window)
             : 0;
-        const initialZone = progressToZone(initialProgress);
-        lastZoneRef.current = initialZone;
-        setZone(initialZone, Math.round(initialProgress * 8000));
+        const initialStop = trailCfg.stops[stopIndexAt(trailCfg, initialProgress)].id;
+        lastZoneRef.current = initialStop;
+        activeStopRef.current = initialStop;
+        if (trailCfg.tracksClimb) {
+          setZone(initialStop as Zone, Math.round(initialProgress * 8000));
+        }
 
         // Precompile every shader program up front so the first scroll or
         // reaction never hits a mid-session compile hitch.
@@ -2205,17 +2160,12 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
           break;
         default:
           if (type.startsWith("nav-")) {
-            const zone = type.slice(4) as Zone;
-            const marker = markersRef.current.find((m) => m.zone === zone);
-            const curve = pathCurveRef.current || pathCurve;
+            const stop = type.slice(4);
+            const marker = markersRef.current.find((m) => m.stop === stop);
+            const hoop = trailHoopPoint(trailCfg, stop);
             const pos = marker
               ? marker.portal.position.clone()
-              : curve
-                ? curve
-                    .getPoint(Math.max(0, Math.min(1, zoneTrailT(zone))))
-                    .clone()
-                    .add(new THREE.Vector3(0, 1.2, 0))
-                : new THREE.Vector3(0, 5, 0);
+              : new THREE.Vector3(hoop.x, hoop.y + 0.4, hoop.z);
             soundEngine.nav();
             spawnNavFlash(pos);
           }
@@ -2355,7 +2305,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       });
 
       // Trail markers bob/pulse and highlight active zone
-      const activeZone = currentZoneRef.current;
+      const activeStop = activeStopRef.current;
       const trailT = Math.max(0, Math.min(1, scrollProgressRef.current));
 
       // Marker hover state is maintained by the off-loop raycaster.
@@ -2367,7 +2317,7 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       }
 
       markersRef.current.forEach((m, i) => {
-        const isActive = m.zone === activeZone;
+        const isActive = m.stop === activeStop;
         const dist = Math.abs(m.t - trailT);
         const nearby = dist < 0.35;
         const bobSpeed = isActive ? 2.5 : 1.2;
@@ -2615,6 +2565,9 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
       canvasEl.removeEventListener("pointerleave", onPointerLeave);
       if (st) st.kill();
       renderer.dispose();
+      // Release the WebGL context now rather than at GC, so leaving and
+      // re-entering a trail never piles up live contexts.
+      renderer.forceContextLoss();
       lights.dispose();
       particles.dispose();
       burstPool.dispose();
@@ -2725,8 +2678,9 @@ const Mountain3D = forwardRef<MountainHandle, Mountain3DProps>(function Mountain
 
     flagSpawnedRef.current = true;
 
+    // The route ends 0.8 above the summit rock; plant the flag just above it.
     const summitPos = pathCurve.getPoint(1);
-    summitPos.y += 1.2;
+    summitPos.y += 0.5;
 
     const flagTexture = createFlagTexture();
     const flagMat = new THREE.SpriteMaterial({

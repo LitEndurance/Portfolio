@@ -219,15 +219,32 @@ interface ClimbContextValue extends ClimbState {
 
 const ClimbContext = createContext<ClimbContextValue | null>(null);
 
-export function ClimbProvider({ children }: { children: React.ReactNode }) {
+interface ClimbProviderProps {
+  children: React.ReactNode;
+  /**
+   * Load and save the summit-climb game (zones, checkpoints, commands,
+   * strawberries, sound settings) in localStorage. Only the infrastructure
+   * page runs that game; other pages pass false so they never read or
+   * overwrite it.
+   */
+  persist?: boolean;
+  /**
+   * Start the ambient sound engine once the boot sequence is done. Pages
+   * without sound controls pass false so no AudioContext is created.
+   */
+  audio?: boolean;
+}
+
+export function ClimbProvider({ children, persist = true, audio = true }: ClimbProviderProps) {
   const [state, dispatch] = useReducer(reducer, getInitialState());
 
   useEffect(() => {
+    if (!persist) return;
     const persisted = loadPersisted();
     if (Object.keys(persisted).length > 0) {
       dispatch({ type: "HYDRATE", payload: persisted });
     }
-  }, []);
+  }, [persist]);
 
   const stateRef = useRef(state);
   useEffect(() => {
@@ -235,7 +252,7 @@ export function ClimbProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !persist) return;
     try {
       localStorage.setItem(
         STORAGE_KEY,
@@ -254,6 +271,7 @@ export function ClimbProvider({ children }: { children: React.ReactNode }) {
       // noop
     }
   }, [
+    persist,
     state.zonesDiscovered,
     state.checkpoints,
     state.commandsRun,
@@ -268,9 +286,9 @@ export function ClimbProvider({ children }: { children: React.ReactNode }) {
   // an AudioContext during initial load triggers the autoplay suspension warning
   // and consumes resources on low-end devices before any sound is needed.
   useEffect(() => {
-    if (state.bootStage !== "ready") return;
+    if (!audio || state.bootStage !== "ready") return;
     soundEngine.setMuted(!state.soundEnabled, state.soundVolume);
-  }, [state.bootStage, state.soundEnabled, state.soundVolume]);
+  }, [audio, state.bootStage, state.soundEnabled, state.soundVolume]);
 
   const setBootStage = useCallback(
     (stage: ClimbState["bootStage"]) => dispatch({ type: "SET_BOOT_STAGE", stage }),

@@ -75,7 +75,7 @@ body.no-scroll { overflow: hidden; }
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   border: 1px solid rgba(78, 205, 196, 0.12);
   border-radius: 8px;
-  padding: clamp(24px, 4vw, 48px);
+  padding: clamp(20px, 4vw, 48px);
   box-sizing: border-box;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
 }
@@ -193,6 +193,39 @@ body.low-tier .section-card {
   .focus-ring:focus-visible {
     transition: none;
   }
+}
+
+/* "← All trails" link back to the main menu (BackToTrails.tsx), shown at
+   the left of the /websites and /infrastructure headers. */
+.back-to-trails {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 6px 12px 6px 9px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  text-decoration: none;
+  color: #4ecdc4;
+  background: rgba(6, 10, 20, 0.72);
+  border: 1px solid rgba(78, 205, 196, 0.35);
+  border-radius: 999px;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+.back-to-trails:hover {
+  background: rgba(78, 205, 196, 0.12);
+  border-color: rgba(78, 205, 196, 0.6);
+}
+.back-to-trails.focus-ring:focus-visible {
+  border-radius: 999px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-to-trails { transition: none; }
 }
 
 /* Persistent bottom status bar entrance */
@@ -348,4 +381,164 @@ body.low-tier .section-card {
     opacity: 0;
     transform: scale(0);
   }
+}
+
+/* ─── Shared cards, buttons & form fields ──────────────── */
+/* In the components layer so Tailwind utilities (e.g. md:grid-cols-2,
+   md:col-span-2) can still override these defaults. */
+@layer components {
+
+  /* Content card: one padding/radius/border recipe for every card inside a
+     section panel. Cards fill their grid cell so rows line up. */
+  .content-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 20px;
+    border: 1px solid rgba(78, 205, 196, 0.14);
+    border-radius: 8px;
+    background: rgba(78, 205, 196, 0.025);
+    transition: border-color 0.3s ease, background-color 0.3s ease, transform 0.3s ease;
+  }
+
+  .content-card:hover {
+    border-color: rgba(78, 205, 196, 0.26);
+    background: rgba(78, 205, 196, 0.045);
+  }
+
+  @media (min-width: 768px) {
+    .content-card { padding: 24px; }
+  }
+
+  /* Card grids: single column on phones, two columns from 640px. Gap grows
+     slightly on larger screens. */
+  .card-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  @media (min-width: 640px) {
+    .card-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (min-width: 1024px) {
+    .card-grid { gap: 20px; }
+  }
+
+  /* Small mono label used above card titles and section sub-blocks */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+    color: rgba(78, 205, 196, 0.75);
+  }
+
+  .eyebrow-gold { color: #d4a843; }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: #e8ecf1;
+    text-wrap: balance;
+  }
+
+  .card-body {
+    font-family: var(--font-display);
+    font-size: 14px;
+    line-height: 1.65;
+    color: rgba(208, 213, 221, 0.85);
+  }
+
+  /* Buttons: solid primary for the main action, outline for the secondary */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 12px 24px;
+    box-sizing: border-box;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid #4ecdc4;
+    outline-offset: 3px;
+  }
+
+  .btn-primary {
+    background: #4ecdc4;
+    border-color: #4ecdc4;
+    color: #06121a;
+  }
+
+  .btn-primary:hover {
+    background: #6fe0d8;
+    border-color: #6fe0d8;
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: rgba(232, 236, 241, 0.22);
+    color: #e8ecf1;
+  }
+
+  .btn-ghost:hover {
+    border-color: rgba(78, 205, 196, 0.55);
+    color: #4ecdc4;
+  }
+
+  @media (max-width: 479px) {
+    .btn-row > .btn { flex: 1 1 100%; }
+  }
+
+  .form-field {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--font-display);
+    font-size: 15px;
+    color: #e8ecf1;
+    background: rgba(6, 10, 20, 0.6);
+    border: 1px solid rgba(78, 205, 196, 0.18);
+    border-radius: 6px;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .form-field::placeholder { color: rgba(208, 213, 221, 0.35); }
+
+  .form-field:focus-visible {
+    border-color: rgba(78, 205, 196, 0.6);
+    box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.15);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .content-card,
+    .btn,
+    .form-field { transition: none; }
+    .btn-primary:hover { transform: none; }
+  }
+}
+
+/* Trail-select cards on the landing page */
+.trail-card:hover {
+  border-color: rgba(78, 205, 196, 0.32) !important;
 }

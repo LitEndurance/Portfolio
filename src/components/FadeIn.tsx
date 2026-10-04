@@ -35,7 +35,18 @@ export default function FadeIn({ children, delay = 0, y = 40, className = "" }: 
       ease: "power2.out",
       scrollTrigger: {
         trigger: el,
-        start: "top 85%",
+        // "top 85%", but capped just below the maximum scroll so blocks near
+        // the very bottom of the page (e.g. contact details) still reveal
+        // when the visitor reaches the end. Only the upper end is capped:
+        // GSAP's clamp() also raises negative starts to 0, which left blocks
+        // already in view at scroll 0 (the hero) hidden until the first
+        // scroll. No cap while the page can't scroll (boot overlay lock).
+        start: () => {
+          const natural =
+            el.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.85;
+          const max = ScrollTrigger.maxScroll(window);
+          return max > 0 ? Math.min(natural, max - 1) : natural;
+        },
         once: true,
       },
     });

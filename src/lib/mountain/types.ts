@@ -1,5 +1,4 @@
 import type * as THREE from "three";
-import type { Zone } from "@/components/zoneTypes";
 
 export interface MountainData {
   geometry: THREE.BufferGeometry;
@@ -19,7 +18,8 @@ export interface Marker {
   portal: THREE.Sprite;
   sprite: THREE.Sprite;
   hoverRing: THREE.Sprite;
-  zone: Zone;
+  /** Trail stop (page section id) this hoop marks, e.g. "skills" or "services". */
+  stop: string;
   basePosition: THREE.Vector3;
   t: number;
   hovered: boolean;

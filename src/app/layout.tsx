@@ -5,7 +5,7 @@ import WebVitals from "@/components/WebVitals";
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: "600",
+  weight: ["400", "600"],
   variable: "--font-inter",
   display: "swap",
 });
@@ -25,18 +25,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable}`}>
       <head>
-        <meta httpEquiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'; upgrade-insecure-requests;" />
+        <meta httpEquiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none';" />
         <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
         <meta name="referrer" content="strict-origin-when-cross-origin" />
         <meta httpEquiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" />
 
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        {/* Preload the mountain geometry so the 3D scene initializes sooner. */}
-        <link rel="preload" href="/mountain.bin.gz" as="fetch" crossOrigin="anonymous" />
       </head>
-      <body className={`antialiased ${inter.variable} ${instrumentSerif.variable}`}>
+      <body className="antialiased">
         {children}
         <WebVitals />
       </body>

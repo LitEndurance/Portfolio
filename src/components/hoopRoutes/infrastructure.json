@@ -1,0 +1,19 @@
+{
+  "comment": "Infrastructure-trail hoop route (the /infrastructure page), in world units after Mountain3D's sinkY (-3) transform. Points tagged with `hoop` are the visible marker hoops (y = ground + 0.8, so the flat ring sits on the rock); the rest are via points that shape the orb's path so it hugs the terrain. Spirals counter-clockwise seen from above: front base -> east wall -> back face -> west shoulder -> summit. Validate with `npm run test:orb` after editing.",
+  "points": [
+    { "x": 0, "y": -9.8, "z": 0.5, "hoop": "about", "label": "Base Camp" },
+    { "x": 1.6, "y": -7.16, "z": -2.4 },
+    { "x": 3.2, "y": -6.86, "z": -4.4 },
+    { "x": 3.8, "y": -2.58, "z": -6.45, "hoop": "skills", "label": "Gear Wall" },
+    { "x": 3, "y": -2.1, "z": -8.7 },
+    { "x": 2.35, "y": -1.6, "z": -11.09 },
+    { "x": 1.37, "y": -1.2, "z": -12.4 },
+    { "x": 0.02, "y": -0.61, "z": -13.03, "hoop": "projects", "label": "Summit Log" },
+    { "x": -1.7, "y": -0.61, "z": -13.35 },
+    { "x": -3.33, "y": 0.38, "z": -12.64 },
+    { "x": -4.17, "y": 0.13, "z": -11.25, "hoop": "gallery", "label": "Trail Markers" },
+    { "x": -3.76, "y": 2.06, "z": -10.14 },
+    { "x": -2.84, "y": 4.86, "z": -9.72 },
+    { "x": -1.77, "y": 6.45, "z": -10.26, "hoop": "contact", "label": "Summit" }
+  ]
+}

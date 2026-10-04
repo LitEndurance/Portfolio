@@ -1,0 +1,4 @@
+# Copy to .dev.vars (git-ignored) for `wrangler pages dev`. Never commit real keys.
+RESEND_API_KEY=re_your_key_here
+CONTACT_TO=willbarnh@gmail.com
+CONTACT_FROM=Website Contact <contact@litendurance.dev>

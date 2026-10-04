@@ -10,8 +10,8 @@ const projects = [
     number: "01",
     title: "QUALITYSTOVESANDSPAS.COM",
     description:
-      "Full website rebuild replacing the retailer's Showit site: custom Next.js, statically prerendered and edge-cached on Cloudflare, manuals on R2, lead forms through an n8n workflow layer aggregating the NetSuite API (validation, reshaping, retries). Server response down 39% (391→237ms), Lighthouse 93/96/96/100, leads up 244% (9→31 in 5 weeks), core-market traffic up 49% YoY.",
-    tags: ["Next.js", "Cloudflare", "R2", "n8n", "NetSuite", "GA4", "Lighthouse"],
+      "Full website rebuild replacing the retailer's Showit site: custom Next.js, statically prerendered and edge-cached on Cloudflare, product manuals on R2. Server response down 39% (391→237ms), Lighthouse 93/96/96/100, leads up 244% (9→31 in 5 weeks), core-market traffic up 49% YoY.",
+    tags: ["Next.js", "Cloudflare", "R2", "GA4", "Lighthouse"],
     status: "LIVE",
   },
   {
@@ -71,17 +71,22 @@ export default function ProjectsSection() {
       badge="Summit Log"
       title="Key infrastructure deployments"
     >
-      <div className="space-y-8">
-        <QualityStovesCaseStudy />
+      <QualityStovesCaseStudy />
+      {/* Two-up project cards from md; an odd last card spans the full row so
+          the grid never ends with a lone half-width card. */}
+      <div className="card-grid md:grid-cols-2">
         {projects.map((p, idx) => (
-          <FadeIn key={p.number} delay={0.1 * (idx + 1)}>
-            <div
-              style={{
-                borderBottom: "1px solid rgba(78, 205, 196, 0.08)",
-                paddingBottom: "24px",
-              }}
-            >
-              <div className="flex items-center gap-3 mb-2">
+          <FadeIn
+            key={p.number}
+            delay={0.08 * (idx % 2) + 0.1}
+            className={`h-full${
+              idx === projects.length - 1 && projects.length % 2 === 1
+                ? " md:col-span-2"
+                : ""
+            }`}
+          >
+            <article className="content-card project-card">
+              <div className="flex items-center gap-3 mb-3">
                 <p
                   style={{
                     fontFamily: "var(--font-mono)",
@@ -117,11 +122,12 @@ export default function ProjectsSection() {
                 className="uppercase transition-colors duration-300 cursor-pointer focus-ring inline-block"
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "clamp(16px, 1.8vw, 22px)",
-                  fontWeight: 300,
+                  fontSize: "clamp(16px, 1.6vw, 19px)",
+                  fontWeight: 400,
+                  lineHeight: 1.3,
                   letterSpacing: "0.02em",
                   color: "#e8ecf1",
-                  marginBottom: "8px",
+                  marginBottom: "10px",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = "#4ecdc4";
@@ -147,13 +153,20 @@ export default function ProjectsSection() {
                   fontFamily: "var(--font-mono)",
                   fontSize: "clamp(12px, 0.95vw, 14px)",
                   lineHeight: 1.65,
-                  color: "rgba(78, 205, 196, 0.7)",
-                  marginBottom: "12px",
+                  color: "rgba(78, 205, 196, 0.75)",
+                  marginBottom: "16px",
                 }}
               >
                 {p.description}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div
+                className="flex flex-wrap gap-x-2 gap-y-1"
+                style={{
+                  marginTop: "auto",
+                  paddingTop: "14px",
+                  borderTop: "1px solid rgba(78, 205, 196, 0.1)",
+                }}
+              >
                 {p.tags.map((tag, i) => (
                   <span
                     key={i}
@@ -174,7 +187,7 @@ export default function ProjectsSection() {
                   </span>
                 ))}
               </div>
-            </div>
+            </article>
           </FadeIn>
         ))}
       </div>

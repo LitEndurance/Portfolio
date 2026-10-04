@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Menu, X, Volume2, VolumeX } from "lucide-react";
 import { useClimb } from "@/components/ClimbContext";
+import BackToTrails from "@/components/BackToTrails";
 
 const navItems = [
   { id: "about", label: "Base Camp" },
@@ -136,19 +137,29 @@ export default function Header() {
   return (
     <header
       className="fixed top-0 left-0 right-0 z-[3] flex items-center justify-between"
-      style={{ padding: "20px 5vw" }}
+      style={{
+        padding: "20px 5vw",
+        // Fade the page out under the nav so section cards scrolling
+        // beneath it don't collide with the nav labels.
+        background:
+          "linear-gradient(to bottom, rgba(6, 10, 20, 0.92) 0%, rgba(6, 10, 20, 0.7) 55%, rgba(6, 10, 20, 0) 100%)",
+      }}
     >
-      <span
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "12px",
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-          color: "#4ecdc4",
-        }}
-      >
-        WILLIAM BARNHART
-      </span>
+      <div className="flex items-center" style={{ gap: "14px", minWidth: 0 }}>
+        <BackToTrails />
+        <span
+          className="truncate"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "12px",
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            color: "#4ecdc4",
+          }}
+        >
+          WILLIAM BARNHART
+        </span>
+      </div>
 
       {/* Desktop nav */}
       <nav className="hidden md:flex items-center gap-6">
@@ -209,6 +220,7 @@ export default function Header() {
           }}
           onClick={() => setMobileOpen(false)}
         >
+          <BackToTrails />
           {navItems.map((item) => (
             <button
               key={item.id}

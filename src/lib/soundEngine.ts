@@ -112,18 +112,44 @@ function stopWindLoop() {
   windGain = null;
 }
 
-let unlockListenerAdded = false;
+let unlockHandler: (() => void) | null = null;
+
+function removeUnlockListener() {
+  if (!unlockHandler || typeof document === "undefined") return;
+  document.removeEventListener("click", unlockHandler);
+  document.removeEventListener("keydown", unlockHandler);
+  unlockHandler = null;
+}
 
 function addUnlockListener() {
-  if (unlockListenerAdded || typeof document === "undefined") return;
-  unlockListenerAdded = true;
+  if (unlockHandler || typeof document === "undefined") return;
   const tryUnlock = () => {
+    removeUnlockListener();
     if (!isMuted) {
       fadeIn();
     }
   };
-  document.addEventListener("click", tryUnlock, { once: true });
-  document.addEventListener("keydown", tryUnlock, { once: true });
+  unlockHandler = tryUnlock;
+  document.addEventListener("click", tryUnlock);
+  document.addEventListener("keydown", tryUnlock);
+}
+
+// Silence everything when the page that owns the sound leaves (client-side
+// navigation keeps this module alive): stop the wind loop, drop the master
+// gain, forget the boot fade so the next visit fades in again, drop any
+// pending autoplay-unlock listener, and suspend the AudioContext.
+function stop() {
+  removeUnlockListener();
+  stopWindLoop();
+  bootFadedIn = false;
+  if (audioCtx && masterGain) {
+    const t = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(t);
+    masterGain.gain.setValueAtTime(0, t);
+  }
+  if (audioCtx && audioCtx.state === "running") {
+    audioCtx.suspend().catch(() => {});
+  }
 }
 
 function applyVolume() {
@@ -246,6 +272,7 @@ function playNoise(duration = 0.05, gainValue = 0.3) {
 export const soundEngine = {
   setMuted,
   setVolume,
+  stop,
 
   init() {
     getCtx();

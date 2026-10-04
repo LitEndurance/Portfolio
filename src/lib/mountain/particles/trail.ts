@@ -113,7 +113,7 @@ export function createClimberTrail(profile: QualityProfile): ClimberTrail {
   const points = new THREE.Points(geometry, material);
 
   let pushCounter = 0;
-  let pending = new THREE.Vector3();
+  const pending = new THREE.Vector3();
   let hasPending = false;
 
   return {

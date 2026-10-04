@@ -13,7 +13,7 @@ const screenshots = [
     src: "/screenshots/qualitystoves-home.png",
     caption: "Quality Stoves & Spas — Full Website Rebuild",
     description:
-      "Custom Next.js build replacing the retailer's Showit site: statically prerendered, edge-cached on Cloudflare, with lead forms piped through an n8n workflow layer into NetSuite. Featured case study in the Summit Log above.",
+      "Custom Next.js build replacing the retailer's Showit site: statically prerendered, edge-cached on Cloudflare, product manuals on R2. Featured case study in the Summit Log above.",
   },
   {
     src: "/screenshots/qualitystoves-products.png",
@@ -69,11 +69,19 @@ export default function GallerySection() {
       badge="Trail Markers"
       title="Screenshots of deployed systems"
     >
-      <div className="space-y-8 mb-10">
+      {/* Featured shot full width, the rest as a 2-up grid of cards so each
+          caption sits clearly inside its own card instead of floating between
+          two full-width screenshots. */}
+      <div className="card-grid card-grid-2" style={{ marginBottom: "40px" }}>
         {screenshots.map((shot, i) => (
-          <FadeIn key={shot.src} delay={0.1 * (i + 1)}>
+          <FadeIn
+            key={shot.src}
+            delay={i === 0 ? 0.1 : 0.08 * ((i - 1) % 2) + 0.1}
+            className={i === 0 ? "h-full sm:col-span-2" : "h-full"}
+          >
             <div
-              className="group cursor-pointer focus-ring"
+              className="content-card group cursor-pointer focus-ring"
+              style={{ padding: 0, overflow: "hidden" }}
               data-wobble
               onClick={() => setLightbox(shot.src)}
               tabIndex={0}
@@ -87,16 +95,16 @@ export default function GallerySection() {
               }}
             >
               <div
-                className="relative overflow-hidden mb-3"
-                style={{ border: "1px solid rgba(78, 205, 196, 0.12)", borderRadius: "4px" }}
+                className="relative overflow-hidden aspect-[2/1]"
+                style={{ borderBottom: "1px solid rgba(78, 205, 196, 0.12)" }}
               >
                 <OptimizedImage
                   src={shot.src}
                   alt={shot.caption}
-                  className="w-full h-auto object-cover transition-all duration-700 group-hover:scale-[1.02] group-hover:opacity-100"
+                  className="w-full h-full object-cover object-top transition-all duration-700 group-hover:scale-[1.02] group-hover:opacity-100"
                   style={{ opacity: 0.9 }}
                   loading="lazy"
-                  sizes="(max-width: 768px) 100vw, 80vw"
+                  sizes={i === 0 ? "(max-width: 768px) 100vw, 80vw" : "(max-width: 640px) 100vw, 40vw"}
                 />
                 <div
                   className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 flex items-center justify-center"
@@ -118,40 +126,42 @@ export default function GallerySection() {
                   </span>
                 </div>
               </div>
-              <p
-                className="uppercase mb-1"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "rgba(78, 205, 196, 0.45)",
-                  letterSpacing: "0.05em",
-                }}
-              >
-                {String(i + 1).padStart(2, "0")}
-              </p>
-              <h3
-                className="mb-1"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "clamp(15px, 1.3vw, 18px)",
-                  fontWeight: 300,
-                  color: "#e8ecf1",
-                  lineHeight: 1.3,
-                  letterSpacing: "0.02em",
-                }}
-              >
-                {shot.caption}
-              </h3>
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "clamp(12px, 0.95vw, 14px)",
-                  lineHeight: 1.6,
-                  color: "rgba(78, 205, 196, 0.6)",
-                }}
-              >
-                {shot.description}
-              </p>
+              <div className="flex flex-col" style={{ padding: "16px 20px 20px", flex: 1 }}>
+                <p
+                  className="uppercase mb-1"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "11px",
+                    color: "rgba(78, 205, 196, 0.5)",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </p>
+                <h3
+                  className="mb-2"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: i === 0 ? "clamp(15px, 1.4vw, 18px)" : "clamp(14px, 1.2vw, 16px)",
+                    fontWeight: 400,
+                    color: "#e8ecf1",
+                    lineHeight: 1.35,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {shot.caption}
+                </h3>
+                <p
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "clamp(12px, 0.95vw, 13px)",
+                    lineHeight: 1.6,
+                    color: "rgba(78, 205, 196, 0.65)",
+                  }}
+                >
+                  {shot.description}
+                </p>
+              </div>
             </div>
           </FadeIn>
         ))}
@@ -171,16 +181,16 @@ export default function GallerySection() {
           >
             Tech Stack Visuals
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {extraImages.map((img, i) => (
               <div
                 key={i}
                 data-wobble
-                className="relative overflow-hidden group cursor-pointer focus-ring"
+                className="relative overflow-hidden group cursor-pointer focus-ring aspect-[16/9]"
                 style={{
-                  border: "1px solid rgba(78, 205, 196, 0.1)",
+                  border: "1px solid rgba(78, 205, 196, 0.14)",
                   background: "rgba(0, 0, 0, 0.45)",
-                  borderRadius: "4px",
+                  borderRadius: "8px",
                 }}
                 onClick={() => setLightbox(img.src)}
                 tabIndex={0}
@@ -196,8 +206,8 @@ export default function GallerySection() {
                 <OptimizedImage
                   src={img.src}
                   alt={img.caption}
-                  className="w-full h-auto object-cover transition-all duration-500 group-hover:opacity-100 group-hover:scale-[1.03]"
-                  style={{ opacity: 0.75, maxHeight: "90px" }}
+                  className="w-full h-full object-cover transition-all duration-500 group-hover:opacity-100 group-hover:scale-[1.03]"
+                  style={{ opacity: 0.75 }}
                   loading="lazy"
                   sizes="(max-width: 768px) 50vw, 25vw"
                 />

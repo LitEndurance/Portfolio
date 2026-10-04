@@ -66,39 +66,33 @@ export default function SkillsGridSection() {
       title="Technical expertise across the stack"
     >
       <FadeIn delay={0.12}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+        <div className="card-grid card-grid-2" style={{ marginBottom: "40px" }}>
           {skillCategories.map((cat) => (
-            <div
-              key={cat.title}
-              data-wobble
-              className="p-5 transition-colors duration-300 hover:bg-[rgba(78,205,196,0.06)]"
-              style={{ 
-                border: "1px solid rgba(78, 205, 196, 0.1)",
-                background: "rgba(10, 14, 26, 0.32)",
-                borderRadius: "4px",
-              }}
-            >
-              <div
-                className="mb-3"
+            <div key={cat.title} data-wobble className="content-card">
+              <h3
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "clamp(13px, 1.2vw, 15px)",
-                  fontWeight: 300,
+                  fontSize: "clamp(13px, 1.2vw, 14px)",
+                  fontWeight: 500,
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
-                  color: "#d0d5dd",
+                  color: "#e8ecf1",
+                  paddingBottom: "12px",
+                  marginBottom: "14px",
+                  borderBottom: "1px solid rgba(78, 205, 196, 0.12)",
                 }}
               >
                 {cat.title}
-              </div>
-              <ul className="space-y-1.5">
+              </h3>
+              <ul className="space-y-2">
                 {cat.skills.map((skill, i) => (
                   <li
                     key={i}
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "clamp(12px, 0.95vw, 14px)",
-                      color: "rgba(78, 205, 196, 0.75)",
+                      fontSize: "clamp(12px, 0.95vw, 13.5px)",
+                      lineHeight: 1.45,
+                      color: "rgba(78, 205, 196, 0.8)",
                     }}
                   >
                     {skill}
@@ -124,16 +118,16 @@ export default function SkillsGridSection() {
           >
             Technologies
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {techImages.map((img, i) => (
               <div
                 key={i}
                 data-wobble
-                className="relative overflow-hidden group focus-ring"
+                className="relative overflow-hidden group focus-ring aspect-[16/9]"
                 style={{
-                  border: "1px solid rgba(78, 205, 196, 0.1)",
+                  border: "1px solid rgba(78, 205, 196, 0.14)",
                   background: "rgba(0, 0, 0, 0.45)",
-                  borderRadius: "4px",
+                  borderRadius: "8px",
                 }}
                 tabIndex={0}
                 aria-label={img.label}
@@ -141,8 +135,8 @@ export default function SkillsGridSection() {
                 <OptimizedImage
                   src={img.src}
                   alt={img.label}
-                  className="w-full h-auto object-cover transition-all duration-500 group-hover:opacity-100 group-hover:scale-[1.03]"
-                  style={{ opacity: 0.75, maxHeight: "80px" }}
+                  className="w-full h-full object-cover transition-all duration-500 group-hover:opacity-100 group-hover:scale-[1.03]"
+                  style={{ opacity: 0.75 }}
                   loading="lazy"
                   sizes="(max-width: 768px) 50vw, 25vw"
                 />

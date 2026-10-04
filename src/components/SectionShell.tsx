@@ -12,8 +12,13 @@ interface SectionShellProps {
   badge: string;
   badgeIcon: string;
   title: string;
+  /** Optional highlighted tail of the title (styled by the page's own CSS
+   *  via the `sites-accent` class). */
+  titleAccent?: string;
   children: ReactNode;
   className?: string;
+  /** Render the title as the page's h1 with a larger display size. */
+  headingLevel?: "h1" | "h2";
 }
 
 export default function SectionShell({
@@ -21,9 +26,13 @@ export default function SectionShell({
   badge,
   badgeIcon,
   title,
+  titleAccent,
   children,
   className = "",
+  headingLevel = "h2",
 }: SectionShellProps) {
+  const Heading = headingLevel;
+  const isPageTitle = headingLevel === "h1";
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,26 +76,32 @@ export default function SectionShell({
       <div ref={cardRef} className="section-card">
         <FadeIn>
           <div
-            className="level-badge mb-5"
+            className="level-badge section-badge mb-5"
             style={{ fontSize: "11px", letterSpacing: "0.13em" }}
           >
             <span>{badgeIcon}</span>
             <span>{badge}</span>
           </div>
-          <h2
-            className="mb-6"
+          <Heading
+            className="section-title mb-6"
             style={{
               fontFamily: "var(--font-display)",
-              fontSize: "clamp(22px, 3vw, 36px)",
+              fontSize: isPageTitle ? "clamp(30px, 4.4vw, 52px)" : "clamp(24px, 3vw, 36px)",
               fontWeight: 600,
-              lineHeight: 1.12,
+              lineHeight: isPageTitle ? 1.06 : 1.12,
               letterSpacing: "-0.02em",
               color: "#e8ecf1",
               textWrap: "balance",
             }}
           >
             {title}
-          </h2>
+            {titleAccent ? (
+              <>
+                {" "}
+                <span className="sites-accent">{titleAccent}</span>
+              </>
+            ) : null}
+          </Heading>
         </FadeIn>
         {children}
       </div>
