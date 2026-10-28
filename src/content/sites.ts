@@ -100,6 +100,31 @@ export const sites = {
     alsoBuiltLabel: "Also built",
     alsoBuilt: [
       {
+        name: "BoredomHub.net",
+        tag: "Web application",
+        url: "https://boredomhub.net",
+        urlLabel: "boredomhub.net",
+        period: "Aug 2026 – present · 400+ commits",
+        description:
+          "A full-stack game-server community I build and maintain: Discord login, live server status with restart notices, support tickets synced to a Discord bot, community suggestions and votes, events, and leaderboards. Staff run servers through the Calagopus panel, manage player-file backups, moderate, and review a filterable audit log — React + Vite + TypeScript, Rust API and bot, PostgreSQL, Docker.",
+        screenshot: {
+          src: "/screenshots/boredomhub-home.png",
+          alt: "BoredomHub.net community homepage",
+        },
+        scores: {
+          value: "72–100",
+          label: "Google quality scores (desktop)",
+          items: [
+            { label: "Performance", value: 72 },
+            { label: "Accessibility", value: 96 },
+            { label: "Best practices", value: 96 },
+            { label: "SEO", value: 100 },
+          ],
+          detail:
+            "Lighthouse on boredomhub.net, Oct 28, 2026. Mobile performance 67; accessibility, best practices, and SEO match desktop.",
+        },
+      },
+      {
         name: "Caeranthil",
         tag: "Web application",
         description:
@@ -328,7 +353,7 @@ export const sites = {
     badgeIcon: "🏠",
     badge: "Lodge",
     title: "The person behind the work",
-    body: "I'm William Barnhart, based in the Spokane / Coeur d'Alene area and available remotely. I run hosting infrastructure for other businesses, build full-stack web applications, and manage the Quality Stoves & Spas site day to day — so when you call, you reach the person who built the thing.",
+    body: "I'm William Barnhart, based in the Spokane / Coeur d'Alene area and available remotely. I run hosting infrastructure for other businesses, build full-stack web applications, and manage the Quality Stoves & Spas and BoredomHub.net sites day to day — so when you call, you reach the person who built the thing.",
     cta: { label: "Get in touch", href: "#contact" },
     // Quick facts beside the bio, restating the bio itself.
     facts: [

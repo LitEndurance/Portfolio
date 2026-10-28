@@ -103,5 +103,19 @@
     "png": "/screenshots/qualitystoves-products.png",
     "webp": "/screenshots/qualitystoves-products.webp",
     "avif": "/screenshots/qualitystoves-products.avif"
+  },
+  "boredomhub-home": {
+    "width": 1880,
+    "height": 940,
+    "png": "/screenshots/boredomhub-home.png",
+    "webp": "/screenshots/boredomhub-home.webp",
+    "avif": "/screenshots/boredomhub-home.avif"
+  },
+  "boredomhub-home-mobile": {
+    "width": 780,
+    "height": 1688,
+    "png": "/screenshots/boredomhub-home-mobile.png",
+    "webp": "/screenshots/boredomhub-home-mobile.webp",
+    "avif": "/screenshots/boredomhub-home-mobile.avif"
   }
 }
