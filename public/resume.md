@@ -52,9 +52,9 @@ Systems Administrator and Infrastructure Engineer managing multi-client hosting 
 Scalable Minecraft hosting platform with automated backups, containerized server orchestration via Pterodactyl, and automated uptime monitoring. Multi-node deployment with WireGuard VPN mesh and Cloudflare DDoS protection.
 *Pterodactyl · Docker · WireGuard · Cloudflare · Bash*
 
-### BOREDOMHUB LLC — LIVE
-Pterodactyl panel setup with snapshots and backups for BoredomHub LLC, including Linux server administration and containerized game-server orchestration.
-*Pterodactyl · Linux · Docker · Snapshots · Backups*
+### BOREDOMHUB.NET — LIVE
+Full-stack game-server community platform (400+ commits since Aug 2026): React + Vite + TypeScript front ends, Rust API (Axum, SeaORM), Rust Discord bot, PostgreSQL, Docker. Public Discord login, live server status with restart notices, support tickets synced with the bot, community votes, events, and leaderboards; staff dashboard with Calagopus panel control, player-file backups, moderation, and audit log.
+*React · Rust · PostgreSQL · Docker · Discord*
 
 ### COZYCORD SERVICES — PAST
 Pterodactyl panel setup with snapshots and backups for the Cozycord development team, delivering containerized game-server environments and reliable orchestration.

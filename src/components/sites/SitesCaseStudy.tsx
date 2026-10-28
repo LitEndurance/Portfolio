@@ -244,6 +244,14 @@ export default function SitesCaseStudy() {
             <div className="sites-card">
               {item.screenshot && (
                 <div className="sites-browser" style={{ marginBottom: "18px", boxShadow: "none" }}>
+                  {"urlLabel" in item && item.urlLabel && (
+                    <div className="sites-browser-bar" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                      <span className="sites-browser-url">{item.urlLabel}</span>
+                    </div>
+                  )}
                   <OptimizedImage
                     src={item.screenshot.src}
                     alt={item.screenshot.alt}
@@ -267,15 +275,66 @@ export default function SitesCaseStudy() {
                   </ol>
                 </div>
               )}
-              <p className="eyebrow" style={{ marginBottom: "8px" }}>
-                {item.tag}
-              </p>
+              <div className="flex flex-wrap items-center" style={{ gap: "8px", marginBottom: "8px" }}>
+                <p className="eyebrow" style={{ marginBottom: 0 }}>
+                  {item.tag}
+                </p>
+                {"period" in item && item.period && (
+                  <span className="sites-chip sites-chip-gold" style={{ fontSize: "11px" }}>
+                    <CalendarCheck size={13} aria-hidden="true" />
+                    {item.period}
+                  </span>
+                )}
+                {"url" in item && item.url && "urlLabel" in item && item.urlLabel && (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="sites-chip focus-ring"
+                    style={{ textDecoration: "none", color: "#4ecdc4", fontSize: "11px" }}
+                  >
+                    {item.urlLabel}
+                    <ArrowUpRight size={13} aria-hidden="true" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                )}
+              </div>
               <h4 className="card-title" style={{ fontSize: "17px", marginBottom: "8px" }}>
                 {item.name}
               </h4>
               <p className="card-body" style={{ fontSize: "13.5px" }}>
                 {item.description}
               </p>
+              {"scores" in item && item.scores && (
+                <div style={{ marginTop: "18px" }}>
+                  <p className="sites-stat-value" style={{ fontSize: "clamp(22px, 2.5vw, 28px)" }}>
+                    {item.scores.value}
+                  </p>
+                  <p className="card-title" style={{ fontSize: "14px", marginTop: "8px" }}>
+                    {item.scores.label}
+                  </p>
+                  <div className="sites-scores" style={{ marginTop: "12px" }}>
+                    {item.scores.items.map((s) => (
+                      <div key={s.label} className="sites-score">
+                        <span
+                          className="sites-score-ring"
+                          style={{ "--p": s.value } as React.CSSProperties}
+                          aria-hidden="true"
+                        >
+                          <span>{s.value}</span>
+                        </span>
+                        <span>
+                          <span className="sr-only">{s.value} </span>
+                          {s.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="card-body" style={{ fontSize: "12.5px", marginTop: "12px" }}>
+                    {item.scores.detail}
+                  </p>
+                </div>
+              )}
             </div>
           </FadeIn>
         ))}

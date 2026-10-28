@@ -22,6 +22,18 @@ const screenshots = [
       "Product catalog pages on the rebuilt site — statically generated for instant loads, with product manuals served from R2 object storage.",
   },
   {
+    src: "/screenshots/boredomhub-home.png",
+    caption: "BoredomHub.net — Game Server Community",
+    description:
+      "Full-stack community platform: Discord login, live game-server status with restart countdown, support tickets synced to a Discord bot, suggestions and votes, events, and leaderboards. React + Vite + TypeScript, Rust API and bot, PostgreSQL, Docker — live at boredomhub.net.",
+  },
+  {
+    src: "/screenshots/boredomhub-home-mobile.png",
+    caption: "BoredomHub.net — Mobile Layout",
+    description:
+      "Mobile view of the public community site — same live server status, ticket flow, and voting experience, maintained in active development since August 2026.",
+  },
+  {
     src: "/screenshots/caeranthil-dashboard.png",
     caption: "Caeranthil — Event Management Platform",
     description:

@@ -57,8 +57,10 @@ export default function AboutSection() {
             <p>
               Extensive experience with AI-assisted development workflows, leveraging LLMs and AI
               coding tools to accelerate development cycles and automate infrastructure tasks.
-              Currently providing managed hosting for BoredomHub LLC, including
-              Pterodactyl panel setups with snapshots, backups, and Proxmox VM administration.
+              Currently building and hosting BoredomHub.net — a full-stack game-server
+              community with Discord login, live server status, synced tickets, and a staff
+              dashboard — and providing managed hosting for BoredomHub LLC, including
+              Proxmox VM administration and containerized game-server orchestration.
               Previously supported PVE District and the Cozycord development team with
               containerized application hosting and game-server orchestration.
             </p>
